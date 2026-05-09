@@ -1,0 +1,1169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>API Gateway Selection — Centralized Auth & Rate Limiting</title>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --ink: #0f1117;
+  --ink-2: #3d3f4a;
+  --ink-3: #7a7d8c;
+  --ink-4: #b0b3c1;
+  --bg: #ffffff;
+  --bg-2: #f7f8fa;
+  --bg-3: #eef0f4;
+  --accent: #0050e6;
+  --accent-light: #e8f0ff;
+  --green: #0a7c52;
+  --green-light: #e3f5ee;
+  --red: #c0392b;
+  --red-light: #fdecea;
+  --amber: #9a6200;
+  --amber-light: #fff3cd;
+  --border: #e2e4ea;
+  --code-bg: #151820;
+  --code-text: #232528;
+  --radius: 8px;
+  --radius-lg: 14px;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  font-family: 'DM Sans', system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.75;
+  color: var(--ink);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* Layout */
+.page-wrap { max-width: 900px; margin: 0 auto; padding: 0 2rem 5rem; }
+
+/* Cover */
+.cover {
+  padding: 5rem 0 4rem;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 3.5rem;
+}
+.cover-eyebrow {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 1.2rem;
+}
+.cover-title {
+  font-family: 'Sora', sans-serif;
+  font-size: clamp(28px, 4vw, 42px);
+  font-weight: 600;
+  line-height: 1.18;
+  color: var(--ink);
+  margin-bottom: 1.2rem;
+}
+.cover-title span { color: var(--accent); }
+.cover-desc { font-size: 16px; color: var(--ink-2); max-width: 640px; line-height: 1.8; margin-bottom: 2rem; }
+.cover-meta { display: flex; gap: 2rem; flex-wrap: wrap; }
+.cover-meta-item { font-size: 12px; color: var(--ink-3); display: flex; flex-direction: column; gap: 2px; }
+.cover-meta-item strong { font-size: 13px; font-weight: 500; color: var(--ink-2); }
+
+/* TOC */
+.toc {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem 1.75rem;
+  margin-bottom: 3.5rem;
+}
+.toc-title { font-family: 'Sora', sans-serif; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 1rem; }
+.toc-list { list-style: none; display: grid; grid-template-columns: 1fr 1fr; gap: .35rem 2rem; }
+.toc-list li a { font-size: 13px; color: var(--ink-2); display: flex; gap: 8px; align-items: baseline; }
+.toc-num { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--ink-4); min-width: 20px; }
+
+/* Sections */
+.section { margin-bottom: 4rem; }
+.section-num {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--accent);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  margin-bottom: .5rem;
+}
+h2 {
+  font-family: 'Sora', sans-serif;
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--ink);
+  margin-bottom: 1rem;
+  padding-bottom: .75rem;
+  border-bottom: 1px solid var(--border);
+}
+h3 {
+  font-family: 'Sora', sans-serif;
+  font-size: 17px;
+  font-weight: 500;
+  color: var(--ink);
+  margin: 2rem 0 .75rem;
+}
+h4 {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink-2);
+  margin: 1.5rem 0 .5rem;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+p { margin-bottom: 1rem; color: var(--ink-2); }
+ul, ol { padding-left: 1.5rem; margin-bottom: 1rem; color: var(--ink-2); }
+li { margin-bottom: .3rem; }
+
+/* Callout boxes */
+.callout {
+  border-radius: var(--radius);
+  padding: 1rem 1.25rem;
+  margin: 1.5rem 0;
+  border-left: 3px solid;
+  font-size: 14px;
+  line-height: 1.7;
+}
+.callout.problem { background: var(--red-light); border-color: var(--red); color: #7a1a11; }
+.callout.solution { background: var(--green-light); border-color: var(--green); color: #044d32; }
+.callout.info { background: var(--accent-light); border-color: var(--accent); color: #003399; }
+.callout.warn { background: var(--amber-light); border-color: var(--amber); color: #6a4400; }
+.callout strong { font-weight: 500; }
+
+/* Code blocks */
+pre {
+  background: var(--bg-2);
+  border-radius: var(--radius);
+  padding: 1.25rem 1.5rem;
+  overflow-x: auto;
+  margin: 1.25rem 0;
+  position: relative;
+}
+pre code {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: bold;
+  font-size: 12.5px;
+  line-height: 1.8;
+  color: var(--code-text);
+}
+.code-label {
+  display: inline-block;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  background: rgba(255,255,255,.08);
+  color: #8892b0;
+  padding: 2px 8px;
+  border-radius: 4px;
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+.kw { color: #a78bfa; }
+.str { color: #6ee7b7; }
+.cmt { color: #4a5568; font-style: italic; }
+.num { color: #f9a825; }
+.key { color: #60a5fa; }
+.val { color: #4e4f54; }
+.ann { color: #fb923c; }
+code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12.5px;
+  background: var(--bg-3);
+  padding: 1px 6px;
+  border-radius: 4px;
+  color: var(--ink);
+}
+
+/* Diagrams */
+.diagram-wrap {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 2rem 1.5rem 1.5rem;
+  margin: 1.5rem 0;
+  overflow-x: auto;
+}
+.diagram-caption {
+  text-align: center;
+  font-size: 12px;
+  color: var(--ink-3);
+  margin-top: 1rem;
+  font-style: italic;
+}
+
+/* Badges */
+.badge {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 500;
+  font-family: 'JetBrains Mono', monospace;
+  letter-spacing: .02em;
+}
+.badge-green { background: var(--green-light); color: var(--green); }
+.badge-red { background: var(--red-light); color: var(--red); }
+.badge-amber { background: var(--amber-light); color: var(--amber); }
+.badge-blue { background: var(--accent-light); color: var(--accent); }
+.badge-gray { background: var(--bg-3); color: var(--ink-3); }
+
+/* Comparison table */
+.comp-table { width: 100%; border-collapse: collapse; margin: 1.5rem 0; font-size: 13px; }
+.comp-table th {
+  background: var(--code-bg);
+  color: #c9d1e0;
+  font-family: 'Sora', sans-serif;
+  font-weight: 500;
+  font-size: 12px;
+  padding: 10px 16px;
+  text-align: left;
+  border: 1px solid #252b3b;
+}
+.comp-table th:first-child { border-radius: var(--radius) 0 0 0; }
+.comp-table th:last-child { border-radius: 0 var(--radius) 0 0; }
+.comp-table td {
+  padding: 10px 16px;
+  border: 1px solid var(--border);
+  vertical-align: top;
+  color: var(--ink-2);
+  line-height: 1.6;
+}
+.comp-table tr:nth-child(even) td { background: var(--bg-2); }
+.comp-table td:first-child { font-weight: 500; color: var(--ink); }
+
+/* Tool cards */
+.tool-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1.5rem 0; }
+.tool-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 1.25rem;
+}
+.tool-card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 1rem; }
+.tool-card-title { font-family: 'Sora', sans-serif; font-weight: 600; font-size: 15px; }
+.tool-card-sub { font-size: 12px; color: var(--ink-3); }
+.pros-cons { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; margin-top: .75rem; }
+.pros, .cons { font-size: 12px; }
+.pros-head { font-weight: 500; color: var(--green); margin-bottom: .4rem; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+.cons-head { font-weight: 500; color: var(--red); margin-bottom: .4rem; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+.pros li, .cons li { color: var(--ink-2); margin-bottom: .25rem; padding-left: .25rem; }
+
+/* Decision box */
+.decision {
+  background: var(--code-bg);
+  border-radius: var(--radius-lg);
+  padding: 1.75rem;
+  margin: 2rem 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+}
+.decision-col-title {
+  font-family: 'Sora', sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  margin-bottom: 1rem;
+}
+.decision-col-title.blue { color: #60a5fa; }
+.decision-col-title.purple { color: #c084fc; }
+.decision-item { font-size: 13px; color: #c9d1e0; padding: 4px 0; display: flex; gap: 8px; }
+.decision-item::before { content: '→'; color: #4a5568; }
+
+/* Conclusion card */
+.conclusion-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1.5rem 0; }
+.conclusion-card {
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+  border: 1px solid;
+}
+.conclusion-card.nginx { background: var(--bg-2); border-color: var(--border); }
+.conclusion-card.kong { background: var(--accent-light); border-color: #93b4f5; }
+.conclusion-card .c-title { font-family: 'Sora', sans-serif; font-size: 16px; font-weight: 600; margin-bottom: .5rem; }
+.conclusion-card .c-sub { font-size: 12px; color: var(--ink-3); margin-bottom: 1rem; }
+.conclusion-card ul { font-size: 13px; }
+
+/* Feature list */
+.feature-list { list-style: none; padding: 0; }
+.feature-list li {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+  display: grid;
+  grid-template-columns: 220px 1fr 1fr;
+  gap: 1rem;
+  align-items: center;
+  font-size: 13px;
+}
+.feature-list li:last-child { border-bottom: none; }
+.feature-list .feat-name { font-weight: 500; color: var(--ink); }
+.feature-list .feat-nginx { color: var(--ink-2); }
+.feature-list .feat-kong { color: var(--ink-2); }
+.feature-list .feat-head { font-weight: 600; color: var(--ink-3); font-size: 11px; text-transform: uppercase; }
+
+/* Divider */
+.divider { border: none; border-top: 1px solid var(--border); margin: 3rem 0; }
+</style>
+</head>
+<body>
+<div class="page-wrap">
+
+<!-- ═══════════════════ COVER ═══════════════════ -->
+<div class="cover">
+  <div class="cover-eyebrow">Technical Architecture Report</div>
+  <h1 class="cover-title">API Gateway Selection:<br><span>Centralized Auth &amp; Rate Limiting</span><br>for Microservices</h1>
+  <p class="cover-desc">An evaluation of API gateway options for centralizing JWT authentication and rate limiting across a Kubernetes-based microservices architecture — comparing Kong, NGINX Ingress, Traefik, and Envoy.</p>
+  <div class="cover-meta">
+    <div class="cover-meta-item"><span>Platform</span><strong>Kubernetes</strong></div>
+    <div class="cover-meta-item"><span>Current Ingress</span><strong>ingress-nginx</strong></div>
+    <div class="cover-meta-item"><span>Auth Pattern</span><strong>Forward Auth / External Auth</strong></div>
+    <div class="cover-meta-item"><span>Status</span><strong>Decision Pending</strong></div>
+  </div>
+</div>
+
+<!-- ═══════════════════ TOC ═══════════════════ -->
+<nav class="toc">
+  <div class="toc-title">Table of Contents</div>
+  <ol class="toc-list">
+    <li><a href="#problem"><span class="toc-num">01</span> Problem Statement</a></li>
+    <li><a href="#solution"><span class="toc-num">02</span> Solution Architecture</a></li>
+    <li><a href="#tools"><span class="toc-num">03</span> Tool Comparison</a></li>
+    <li><a href="#kong-vs-envoy"><span class="toc-num">04</span> Kong vs Envoy</a></li>
+    <li><a href="#nginx-rec"><span class="toc-num">05</span> NGINX Recommendation &amp; Example</a></li>
+    <li><a href="#kong-extras"><span class="toc-num">06</span> Kong's Additional Capabilities</a></li>
+    <li><a href="#conclusion"><span class="toc-num">07</span> Conclusion</a></li>
+    <li><a href="#references"><span class="toc-num">08</span> References</a></li>
+  </ol>
+</nav>
+
+
+<!-- ═══════════════════ 1. PROBLEM ═══════════════════ -->
+<div class="section" id="problem">
+  <div class="section-num">01 — Problem Statement</div>
+  <h2>What Problem Are We Solving?</h2>
+
+  <p>Our system consists of multiple microservices. Each service receives requests with a JWT token in the <code>Authorization</code> header, and each service is currently responsible for validating that token independently.</p>
+
+  <div class="callout problem">
+    <strong>Current state:</strong> Every microservice imports a JWT library, maintains its own validation logic, has access to the JWT secret or public key, and performs signature verification on every request. This means authentication logic is scattered across every service in the system.
+  </div>
+
+  <h3>Problems with Distributed JWT Validation</h3>
+  <ul>
+    <li><strong>Code duplication</strong> — every team re-implements the same validation logic in potentially different ways.</li>
+    <li><strong>Inconsistency</strong> — one service might check token expiry correctly while another skips a check, creating security gaps.</li>
+    <li><strong>Key management surface</strong> — every service needs access to the JWT secret or public key, widening the blast radius of a key compromise.</li>
+    <li><strong>Hard to rotate</strong> — changing the JWT algorithm or secret requires updating and redeploying every single service.</li>
+    <li><strong>No rate limiting</strong> — there is currently no request throttling layer, leaving services exposed to abuse and overload.</li>
+    <li><strong>No per-user throttling</strong> — even basic IP-level rate limits are absent, making DoS attacks trivial.</li>
+  </ul>
+
+  <!-- Diagram: Problem (distributed auth) -->
+  <div class="diagram-wrap">
+    <svg width="100%" viewBox="0 0 820 200" role="img">
+      <title>Problem: distributed JWT validation across microservices</title>
+      <desc>Each microservice independently validates the JWT token, causing duplication and inconsistency</desc>
+      <defs>
+        <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M2 1L8 5L2 9" fill="none" stroke="#c0392b" stroke-width="1.5" stroke-linecap="round"/>
+        </marker>
+      </defs>
+      <!-- Client -->
+      <rect x="20" y="78" width="100" height="44" rx="8" fill="#eef0f4" stroke="#c8cbd6" stroke-width="1"/>
+      <text x="70" y="100" text-anchor="middle" font-family="Sora,sans-serif" font-size="13" font-weight="500" fill="#0f1117" dominant-baseline="central">Client</text>
+      <!-- arrows + services -->
+      <line x1="120" y1="100" x2="200" y2="60" stroke="#c0392b" stroke-width="1.2" marker-end="url(#arr)"/>
+      <line x1="120" y1="100" x2="200" y2="100" stroke="#c0392b" stroke-width="1.2" marker-end="url(#arr)"/>
+      <line x1="120" y1="100" x2="200" y2="140" stroke="#c0392b" stroke-width="1.2" marker-end="url(#arr)"/>
+      <!-- JWT label on arrows -->
+      <text x="155" y="72" font-family="JetBrains Mono,monospace" font-size="9" fill="#c0392b">JWT</text>
+      <text x="155" y="97" font-family="JetBrains Mono,monospace" font-size="9" fill="#c0392b">JWT</text>
+      <text x="155" y="147" font-family="JetBrains Mono,monospace" font-size="9" fill="#c0392b">JWT</text>
+      <!-- Service A -->
+      <rect x="202" y="38" width="190" height="44" rx="8" fill="#fdecea" stroke="#e8a09a" stroke-width="1"/>
+      <text x="297" y="55" text-anchor="middle" font-family="Sora,sans-serif" font-size="12" font-weight="500" fill="#7a1a11" dominant-baseline="central">Service A</text>
+      <text x="297" y="73" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="10" fill="#c0392b" dominant-baseline="central">validates JWT ✗</text>
+      <!-- Service B -->
+      <rect x="202" y="78" width="190" height="44" rx="8" fill="#fdecea" stroke="#e8a09a" stroke-width="1"/>
+      <text x="297" y="95" text-anchor="middle" font-family="Sora,sans-serif" font-size="12" font-weight="500" fill="#7a1a11" dominant-baseline="central">Service B</text>
+      <text x="297" y="113" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="10" fill="#c0392b" dominant-baseline="central">validates JWT ✗</text>
+      <!-- Service C -->
+      <rect x="202" y="118" width="190" height="44" rx="8" fill="#fdecea" stroke="#e8a09a" stroke-width="1"/>
+      <text x="297" y="135" text-anchor="middle" font-family="Sora,sans-serif" font-size="12" font-weight="500" fill="#7a1a11" dominant-baseline="central">Service C</text>
+      <text x="297" y="153" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="10" fill="#c0392b" dominant-baseline="central">validates JWT ✗</text>
+      <!-- warning box -->
+      <rect x="430" y="55" width="370" height="90" rx="8" fill="#fff3cd" stroke="#f0c040" stroke-width="1"/>
+      <text x="615" y="78" text-anchor="middle" font-family="Sora,sans-serif" font-size="12" font-weight="600" fill="#9a6200" dominant-baseline="central">Problems with this approach</text>
+      <text x="445" y="100" font-family="DM Sans,sans-serif" font-size="11.5" fill="#6a4400">• Duplicated validation logic in every service</text>
+      <text x="445" y="118" font-family="DM Sans,sans-serif" font-size="11.5" fill="#6a4400">• Every service holds JWT secret / public key</text>
+      <text x="445" y="136" font-family="DM Sans,sans-serif" font-size="11.5" fill="#6a4400">• No centralized rate limiting or user tracking</text>
+    </svg>
+    <div class="diagram-caption">Figure 1 — Current state: distributed JWT validation, every service is responsible for auth</div>
+  </div>
+
+  <h3>Rate Limiting Gap</h3>
+  <p>Beyond authentication, there is currently no rate limiting in place. Without it, a single client (or attacker) can send unlimited requests, potentially degrading service for all users or triggering costly downstream operations. Rate limiting needs to be:</p>
+  <ul>
+    <li><strong>Per-IP</strong> — to block simple floods before they reach services.</li>
+    <li><strong>Per-user (consumer)</strong> — to enforce API quotas tied to authenticated identities, not just network addresses, since many users may share the same IP (NAT, VPN, corporate proxy).</li>
+    <li><strong>Per-route</strong> — some endpoints (e.g. <code>/export</code>, <code>/report</code>) are heavier and need tighter limits than simple GET endpoints.</li>
+  </ul>
+</div>
+
+
+<!-- ═══════════════════ 2. SOLUTION ═══════════════════ -->
+<div class="section" id="solution">
+  <div class="section-num">02 — Solution Architecture</div>
+  <h2>Centralized Auth via API Gateway</h2>
+
+  <p>The solution is to move all authentication and rate limiting responsibility out of individual services and into a single gateway layer. This pattern is called <strong>Forward Auth</strong> (also known as External Auth).</p>
+
+  <div class="callout solution">
+    <strong>Target state:</strong> The gateway intercepts every inbound request, forwards it to a dedicated Auth Service for validation, and only passes the request downstream after receiving a <code>200 OK</code>. User claims extracted from the JWT are injected as headers into the upstream request. Microservices never see or validate a JWT — they only consume clean <code>X-User-*</code> headers they can trust.
+  </div>
+
+  <h3>Forward Auth Flow</h3>
+
+  <div class="diagram-wrap">
+    <svg width="100%" viewBox="0 0 820 300" role="img">
+      <title>Solution: forward auth with header injection</title>
+      <desc>Gateway forwards every request to auth service, extracts JWT claims, and injects them as headers into the upstream request</desc>
+      <defs>
+        <marker id="arrf" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M2 1L8 5L2 9" fill="none" stroke="#0a7c52" stroke-width="1.5" stroke-linecap="round"/>
+        </marker>
+        <marker id="arrb" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M2 1L8 5L2 9" fill="none" stroke="#0050e6" stroke-width="1.5" stroke-linecap="round"/>
+        </marker>
+        <marker id="arrr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M2 1L8 5L2 9" fill="none" stroke="#c0392b" stroke-width="1.5" stroke-linecap="round"/>
+        </marker>
+        <marker id="arrg" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M2 1L8 5L2 9" fill="none" stroke="#888" stroke-width="1.5" stroke-linecap="round"/>
+        </marker>
+      </defs>
+
+      <!-- Client -->
+      <rect x="20" y="108" width="90" height="44" rx="8" fill="#eef0f4" stroke="#c8cbd6" stroke-width="1"/>
+      <text x="65" y="130" text-anchor="middle" font-family="Sora,sans-serif" font-size="13" font-weight="500" fill="#0f1117" dominant-baseline="central">Client</text>
+
+      <!-- Arrow: Client → Gateway -->
+      <line x1="110" y1="130" x2="178" y2="130" stroke="#888" stroke-width="1.4" marker-end="url(#arrg)"/>
+      <text x="144" y="122" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9.5" fill="#7a7d8c">Bearer JWT</text>
+
+      <!-- Gateway -->
+      <rect x="180" y="88" width="170" height="84" rx="10" fill="#e8f0ff" stroke="#93b4f5" stroke-width="1.2"/>
+      <text x="265" y="118" text-anchor="middle" font-family="Sora,sans-serif" font-size="13" font-weight="600" fill="#003399" dominant-baseline="central">Gateway</text>
+      <text x="265" y="140" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="10" fill="#0050e6" dominant-baseline="central">ingress-nginx / Kong</text>
+
+      <!-- Arrow down: Gateway → Auth Service -->
+      <line x1="248" y1="172" x2="248" y2="218" stroke="#0a7c52" stroke-width="1.4" stroke-dasharray="5 3" marker-end="url(#arrf)"/>
+      <text x="238" y="196" text-anchor="end" font-family="DM Sans,sans-serif" font-size="11" fill="#0a7c52">sub-request</text>
+
+      <!-- Arrow up: Auth Service → Gateway -->
+      <line x1="282" y1="218" x2="282" y2="172" stroke="#0a7c52" stroke-width="1.4" stroke-dasharray="5 3" marker-end="url(#arrf)"/>
+      <text x="292" y="196" text-anchor="start" font-family="DM Sans,sans-serif" font-size="11" fill="#0a7c52">200 + claims</text>
+
+      <!-- Auth Service -->
+      <rect x="180" y="220" width="170" height="52" rx="10" fill="#e3f5ee" stroke="#7ecfb0" stroke-width="1.2"/>
+      <text x="265" y="241" text-anchor="middle" font-family="Sora,sans-serif" font-size="13" font-weight="600" fill="#044d32" dominant-baseline="central">Auth Service</text>
+      <text x="265" y="259" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="10" fill="#0a7c52" dominant-baseline="central">decode JWT → extract claims</text>
+
+      <!-- Arrow: 401 back to client -->
+      <path d="M 180 258 L 100 258 L 100 152" fill="none" stroke="#c0392b" stroke-width="1.2" stroke-dasharray="4 3" marker-end="url(#arrr)"/>
+      <text x="75" y="262" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#c0392b">401</text>
+
+      <!-- Arrow: Gateway → Microservices -->
+      <line x1="350" y1="130" x2="430" y2="130" stroke="#0050e6" stroke-width="1.4" marker-end="url(#arrb)"/>
+      <text x="390" y="120" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9.5" fill="#0050e6">X-User-Id, X-User-Role</text>
+
+      <!-- Microservices -->
+      <rect x="432" y="88" width="160" height="84" rx="10" fill="#f0f4ff" stroke="#bfcbf5" stroke-width="1.2"/>
+      <text x="512" y="112" text-anchor="middle" font-family="Sora,sans-serif" font-size="13" font-weight="600" fill="#0f1117" dominant-baseline="central">Microservices</text>
+      <text x="512" y="132" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="10" fill="#3d3f4a">service-a</text>
+      <text x="512" y="150" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="10" fill="#3d3f4a">service-b  service-c</text>
+
+      <!-- Note box -->
+      <rect x="610" y="108" width="195" height="64" rx="8" fill="none" stroke="#b0b3c1" stroke-width="1" stroke-dasharray="5 3"/>
+      <text x="622" y="126" font-family="DM Sans,sans-serif" font-size="11" fill="#3d3f4a">Services receive:</text>
+      <text x="622" y="143" font-family="JetBrains Mono,monospace" font-size="10" fill="#0050e6">X-User-Id: 42</text>
+      <text x="622" y="160" font-family="JetBrains Mono,monospace" font-size="10" fill="#0050e6">X-User-Role: admin</text>
+      <line x1="592" y1="140" x2="610" y2="140" stroke="#b0b3c1" stroke-width="0.8" stroke-dasharray="3 2"/>
+
+      <!-- Legend -->
+      <line x1="180" y1="290" x2="206" y2="290" stroke="#0a7c52" stroke-width="1.4" stroke-dasharray="5 3"/>
+      <text x="212" y="294" font-family="DM Sans,sans-serif" font-size="10.5" fill="#7a7d8c">auth sub-request</text>
+      <line x1="330" y1="290" x2="356" y2="290" stroke="#0050e6" stroke-width="1.4"/>
+      <text x="362" y="294" font-family="DM Sans,sans-serif" font-size="10.5" fill="#7a7d8c">header injection</text>
+      <line x1="470" y1="290" x2="496" y2="290" stroke="#c0392b" stroke-width="1.2" stroke-dasharray="4 3"/>
+      <text x="502" y="294" font-family="DM Sans,sans-serif" font-size="10.5" fill="#7a7d8c">reject 401</text>
+    </svg>
+    <div class="diagram-caption">Figure 2 — Target state: gateway intercepts every request, auth service validates and extracts claims, microservices receive clean headers</div>
+  </div>
+
+  <h3>What the Auth Service Must Do</h3>
+  <p>The auth service exposes a single lightweight endpoint (e.g. <code>GET /validate</code>). It receives the original request headers, validates the JWT, and returns either:</p>
+  <ul>
+    <li><code>200 OK</code> with response headers containing user claims — the gateway injects these into the upstream request.</li>
+    <li><code>401 Unauthorized</code> — the gateway immediately rejects the request, the microservice is never reached.</li>
+  </ul>
+
+<pre><code><span class="cmt"># auth-service — /validate endpoint (Python / FastAPI example)</span>
+<span class="kw">from</span> fastapi <span class="kw">import</span> FastAPI, Header, HTTPException, Response
+<span class="kw">import</span> jwt
+
+app = FastAPI()
+
+<span class="ann">@app.get</span>(<span class="str">"/validate"</span>)
+<span class="kw">def</span> validate(authorization: str = Header(...)):
+    <span class="kw">try</span>:
+        token = authorization.removeprefix(<span class="str">"Bearer "</span>)
+        payload = jwt.decode(token, PUBLIC_KEY, algorithms=[<span class="str">"RS256"</span>])
+    <span class="kw">except</span> jwt.InvalidTokenError:
+        <span class="kw">raise</span> HTTPException(status_code=<span class="num">401</span>)
+
+    <span class="cmt"># Return claims as response headers — gateway will inject them upstream</span>
+    response = Response(status_code=<span class="num">200</span>)
+    response.headers[<span class="str">"X-User-Id"</span>]    = str(payload[<span class="str">"sub"</span>])
+    response.headers[<span class="str">"X-User-Role"</span>]  = payload.get(<span class="str">"role"</span>, <span class="str">"user"</span>)
+    response.headers[<span class="str">"X-User-Email"</span>] = payload.get(<span class="str">"email"</span>, <span class="str">""</span>)
+    <span class="kw">return</span> response
+<span class="code-label">Python</span></code></pre>
+</div>
+
+
+<!-- ═══════════════════ 3. TOOL COMPARISON ═══════════════════ -->
+<div class="section" id="tools">
+  <div class="section-num">03 — Tool Comparison</div>
+  <h2>Available Tools</h2>
+
+  <p>Four tools are evaluated below. All four can implement the forward-auth + rate-limit pattern on Kubernetes, but they differ significantly in operational complexity, feature depth, and licensing model.</p>
+
+  <div class="tool-grid">
+
+    <!-- Kong -->
+    <div class="tool-card">
+      <div class="tool-card-head">
+        <div>
+          <div class="tool-card-title">Kong Gateway</div>
+          <div class="tool-card-sub">Kong Ingress Controller (KIC)</div>
+        </div>
+        <span class="badge badge-blue">Recommended</span>
+      </div>
+      <p style="font-size:13px;color:#3d3f4a;margin-bottom:.75rem">Nginx-based API gateway with a rich plugin ecosystem. Can fully replace <code>ingress-nginx</code>. Configured via Kubernetes CRDs (<code>KongPlugin</code>, <code>KongConsumer</code>).</p>
+      <div class="pros-cons">
+        <div class="pros">
+          <div class="pros-head">Pros</div>
+          <ul>
+            <li>60+ plugins — auth, rate limit, transform, tracing, canary</li>
+            <li>Per-consumer rate limiting (not just per-IP)</li>
+            <li>Admin API — config changes without restart</li>
+            <li>Active health checks on upstreams</li>
+            <li>Fully open source (Apache 2.0)</li>
+          </ul>
+        </div>
+        <div class="cons">
+          <div class="cons-head">Cons</div>
+          <ul>
+            <li>Needs PostgreSQL or DB-less config file</li>
+            <li>Higher operational complexity vs plain NGINX</li>
+            <li>Kong Manager UI is limited in OSS</li>
+            <li>More resources than ingress-nginx</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- NGINX Ingress -->
+    <div class="tool-card">
+      <div class="tool-card-head">
+        <div>
+          <div class="tool-card-title">NGINX Ingress Controller</div>
+          <div class="tool-card-sub">Already deployed</div>
+        </div>
+        <span class="badge badge-green">Already in use</span>
+      </div>
+      <p style="font-size:13px;color:#3d3f4a;margin-bottom:.75rem">Kubernetes-native ingress controller based on NGINX. Supports forward auth via the <code>auth-url</code> annotation and basic rate limiting via <code>limit-rps</code>.</p>
+      <div class="pros-cons">
+        <div class="pros">
+          <div class="pros-head">Pros</div>
+          <ul>
+            <li>Already installed — zero new infrastructure</li>
+            <li>Simple annotation-based config</li>
+            <li>Minimal resource footprint</li>
+            <li>Well-documented, large community</li>
+          </ul>
+        </div>
+        <div class="cons">
+          <div class="cons-head">Cons</div>
+          <ul>
+            <li>Rate limit is per-IP only (no per-user)</li>
+            <li>Config changes require NGINX reload</li>
+            <li>No consumer or credential management</li>
+            <li>Advanced features require Lua snippets</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Traefik -->
+    <div class="tool-card">
+      <div class="tool-card-head">
+        <div>
+          <div class="tool-card-title">Traefik Proxy</div>
+          <div class="tool-card-sub">Traefik Ingress Controller</div>
+        </div>
+        <span class="badge badge-gray">Alternative</span>
+      </div>
+      <p style="font-size:13px;color:#3d3f4a;margin-bottom:.75rem">Go-based reverse proxy with native Kubernetes auto-discovery. <code>ForwardAuth</code> middleware is built-in and requires almost no configuration.</p>
+      <div class="pros-cons">
+        <div class="pros">
+          <div class="pros-head">Pros</div>
+          <ul>
+            <li>ForwardAuth middleware is native, trivial to configure</li>
+            <li>Auto-discovers services via K8s annotations</li>
+            <li>Lightweight, low resource usage</li>
+            <li>MIT license (OSS)</li>
+          </ul>
+        </div>
+        <div class="cons">
+          <div class="cons-head">Cons</div>
+          <ul>
+            <li>Plugin ecosystem far smaller than Kong</li>
+            <li>Rate limit per-consumer requires Enterprise</li>
+            <li>Less mature for complex API management</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Envoy / Istio -->
+    <div class="tool-card">
+      <div class="tool-card-head">
+        <div>
+          <div class="tool-card-title">Envoy / Istio</div>
+          <div class="tool-card-sub">Service Mesh</div>
+        </div>
+        <span class="badge badge-amber">Overkill for this use case</span>
+      </div>
+      <p style="font-size:13px;color:#3d3f4a;margin-bottom:.75rem">L7 proxy (Envoy) with a service mesh control plane (Istio). Intercepts all service-to-service traffic, enforces mTLS, and exposes an <code>ext_authz</code> filter for external authorization.</p>
+      <div class="pros-cons">
+        <div class="pros">
+          <div class="pros-head">Pros</div>
+          <ul>
+            <li>Intercepts both north-south and east-west traffic</li>
+            <li>mTLS between all services automatically</li>
+            <li>Deep observability (traffic, latency, errors)</li>
+            <li>Fully open source (Apache 2.0)</li>
+          </ul>
+        </div>
+        <div class="cons">
+          <div class="cons-head">Cons</div>
+          <ul>
+            <li>Extremely high operational complexity</li>
+            <li>Sidecar injection overhead on every pod</li>
+            <li>Steep learning curve for the entire team</li>
+            <li>Solving a simple problem with a very large tool</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h3>Side-by-Side Feature Matrix</h3>
+  <table class="comp-table">
+    <thead>
+      <tr>
+        <th>Capability</th>
+        <th>Kong</th>
+        <th>NGINX Ingress</th>
+        <th>Traefik</th>
+        <th>Envoy / Istio</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Forward Auth (external)</td>
+        <td><span class="badge badge-green">Native plugin</span></td>
+        <td><span class="badge badge-green">auth-url annotation</span></td>
+        <td><span class="badge badge-green">Native middleware</span></td>
+        <td><span class="badge badge-green">ext_authz filter</span></td>
+      </tr>
+      <tr>
+        <td>JWT claim injection</td>
+        <td><span class="badge badge-green">Yes</span></td>
+        <td><span class="badge badge-green">auth-response-headers</span></td>
+        <td><span class="badge badge-green">authResponseHeaders</span></td>
+        <td><span class="badge badge-green">Yes (via filter)</span></td>
+      </tr>
+      <tr>
+        <td>Rate limit per-IP</td>
+        <td><span class="badge badge-green">Plugin</span></td>
+        <td><span class="badge badge-green">Annotation</span></td>
+        <td><span class="badge badge-green">Middleware</span></td>
+        <td><span class="badge badge-green">Via filter</span></td>
+      </tr>
+      <tr>
+        <td>Rate limit per-user</td>
+        <td><span class="badge badge-green">Yes — KongConsumer</span></td>
+        <td><span class="badge badge-red">No</span></td>
+        <td><span class="badge badge-red">Enterprise only</span></td>
+        <td><span class="badge badge-amber">Complex config</span></td>
+      </tr>
+      <tr>
+        <td>Dynamic config (no restart)</td>
+        <td><span class="badge badge-green">Admin API</span></td>
+        <td><span class="badge badge-amber">Reload required</span></td>
+        <td><span class="badge badge-green">Live config</span></td>
+        <td><span class="badge badge-green">xDS protocol</span></td>
+      </tr>
+      <tr>
+        <td>Consumer management</td>
+        <td><span class="badge badge-green">KongConsumer CRD</span></td>
+        <td><span class="badge badge-red">No</span></td>
+        <td><span class="badge badge-red">No</span></td>
+        <td><span class="badge badge-red">No</span></td>
+      </tr>
+      <tr>
+        <td>Request transformation</td>
+        <td><span class="badge badge-green">Plugin</span></td>
+        <td><span class="badge badge-amber">Lua snippet</span></td>
+        <td><span class="badge badge-amber">Limited</span></td>
+        <td><span class="badge badge-green">Lua / WASM</span></td>
+      </tr>
+      <tr>
+        <td>Active health checks</td>
+        <td><span class="badge badge-green">Built-in</span></td>
+        <td><span class="badge badge-amber">Passive only</span></td>
+        <td><span class="badge badge-green">Built-in</span></td>
+        <td><span class="badge badge-green">Built-in</span></td>
+      </tr>
+      <tr>
+        <td>Distributed tracing</td>
+        <td><span class="badge badge-green">Plugin (Zipkin, OTel)</span></td>
+        <td><span class="badge badge-amber">Manual config</span></td>
+        <td><span class="badge badge-green">Built-in</span></td>
+        <td><span class="badge badge-green">Native</span></td>
+      </tr>
+      <tr>
+        <td>Canary / traffic split</td>
+        <td><span class="badge badge-green">Plugin</span></td>
+        <td><span class="badge badge-amber">Basic annotation</span></td>
+        <td><span class="badge badge-amber">Basic</span></td>
+        <td><span class="badge badge-green">Native (VirtualService)</span></td>
+      </tr>
+      <tr>
+        <td>Operational complexity</td>
+        <td><span class="badge badge-amber">Medium</span></td>
+        <td><span class="badge badge-green">Low</span></td>
+        <td><span class="badge badge-green">Low</span></td>
+        <td><span class="badge badge-red">Very High</span></td>
+      </tr>
+      <tr>
+        <td>License</td>
+        <td><span class="badge badge-green">Apache 2.0</span></td>
+        <td><span class="badge badge-green">Apache 2.0</span></td>
+        <td><span class="badge badge-green">MIT</span></td>
+        <td><span class="badge badge-green">Apache 2.0</span></td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+
+<!-- ═══════════════════ 4. KONG VS ENVOY ═══════════════════ -->
+<div class="section" id="kong-vs-envoy">
+  <div class="section-num">04 — Kong vs Envoy</div>
+  <h2>Best Choice: Kong or Envoy?</h2>
+
+  <p>Both Kong and Envoy can solve the forward-auth + rate-limit problem. The right choice depends on the scope of the problem you are actually solving.</p>
+
+  <div class="decision">
+    <div>
+      <div class="decision-col-title blue">Choose Kong when…</div>
+      <div class="decision-item">You need an API gateway, not a service mesh</div>
+      <div class="decision-item">You want per-consumer quotas and credential management</div>
+      <div class="decision-item">You want to add features via plugins, not custom Lua/WASM</div>
+      <div class="decision-item">Config needs to change at runtime without restarts</div>
+      <div class="decision-item">Your team can operate a gateway but not a full mesh</div>
+      <div class="decision-item">You need north-south traffic management (client ↔ service)</div>
+    </div>
+    <div>
+      <div class="decision-col-title purple">Choose Envoy / Istio when…</div>
+      <div class="decision-item">You need east-west auth (service-to-service mTLS)</div>
+      <div class="decision-item">You have a large platform team to operate the mesh</div>
+      <div class="decision-item">Observability across all inter-service calls is critical</div>
+      <div class="decision-item">You need traffic shifting between every pair of services</div>
+      <div class="decision-item">You have 50+ services and a dedicated SRE team</div>
+      <div class="decision-item">Auth is the least of your concerns — infra scale is</div>
+    </div>
+  </div>
+
+  <div class="callout info">
+    <strong>Verdict for this system:</strong> The problem is north-south API gateway concerns — authenticating external client requests, extracting user identity, and rate limiting. This is Kong's primary use case. Envoy/Istio would solve this problem but would also impose enormous operational overhead for features we don't need yet. <strong>Kong is the right tool here.</strong>
+  </div>
+</div>
+
+
+<!-- ═══════════════════ 5. NGINX RECOMMENDATION ═══════════════════ -->
+<div class="section" id="nginx-rec">
+  <div class="section-num">05 — NGINX Recommendation &amp; Example</div>
+  <h2>Using What We Already Have: ingress-nginx</h2>
+
+  <p>Since <code>ingress-nginx</code> is already deployed on the cluster, it is the path of least resistance. It natively supports forward auth via a single annotation and can implement basic rate limiting. No new infrastructure is required.</p>
+
+  <div class="callout solution">
+    <strong>When ingress-nginx is sufficient:</strong> If your requirements are simply (a) forward JWT validation to the auth service and (b) apply a basic per-IP rate limit, ingress-nginx covers both with a few annotations. No migration needed.
+  </div>
+
+  <h3>Example: Forward Auth + Rate Limit with ingress-nginx</h3>
+
+<pre><code><span class="cmt"># ingress-nginx — forward-auth + rate limiting</span>
+<span class="key">apiVersion</span>: <span class="val">networking.k8s.io/v1</span>
+<span class="key">kind</span>: <span class="val">Ingress</span>
+<span class="key">metadata</span>:
+  <span class="key">name</span>: <span class="val">service-a-ingress</span>
+  <span class="key">namespace</span>: <span class="val">default</span>
+  <span class="key">annotations</span>:
+    <span class="cmt"># 1. Forward every request to auth service before passing upstream</span>
+    <span class="ann">nginx.ingress.kubernetes.io/auth-url</span>: <span class="str">"http://auth-service.default.svc.cluster.local/validate"</span>
+
+    <span class="cmt"># 2. Take these headers from auth service response and inject into upstream request</span>
+    <span class="ann">nginx.ingress.kubernetes.io/auth-response-headers</span>: <span class="str">"X-User-Id, X-User-Role, X-User-Email"</span>
+
+    <span class="cmt"># 3. Basic rate limiting — per IP address</span>
+    <span class="ann">nginx.ingress.kubernetes.io/limit-rps</span>: <span class="str">"20"</span>
+    <span class="ann">nginx.ingress.kubernetes.io/limit-connections</span>: <span class="str">"10"</span>
+
+    <span class="cmt"># 4. Return 429 (not 503) when rate limit is exceeded</span>
+    <span class="ann">nginx.ingress.kubernetes.io/limit-req-status-code</span>: <span class="str">"429"</span>
+<span class="key">spec</span>:
+  <span class="key">ingressClassName</span>: <span class="val">nginx</span>
+  <span class="key">rules</span>:
+    - <span class="key">host</span>: <span class="val">api.yourdomain.com</span>
+      <span class="key">http</span>:
+        <span class="key">paths</span>:
+          - <span class="key">path</span>: <span class="val">/service-a</span>
+            <span class="key">pathType</span>: <span class="val">Prefix</span>
+            <span class="key">backend</span>:
+              <span class="key">service</span>:
+                <span class="key">name</span>: <span class="val">service-a</span>
+                <span class="key">port</span>:
+                  <span class="key">number</span>: <span class="num">80</span>
+<span class="code-label">YAML</span></code></pre>
+
+  <h3>What the Microservice Receives</h3>
+  <p>After the gateway processes the request, the upstream microservice receives the original request body and all original headers, <em>plus</em> the injected user headers from the auth service. The microservice never sees the raw JWT.</p>
+
+<pre><code><span class="cmt"># Headers arriving at service-a after gateway processing</span>
+GET /service-a/orders HTTP/1.1
+Host: service-a
+<span class="cmt"># ── injected by gateway from auth service response ──</span>
+<span class="key">X-User-Id</span>: <span class="num">42</span>
+<span class="key">X-User-Role</span>: <span class="str">admin</span>
+<span class="key">X-User-Email</span>: <span class="str">user@example.com</span>
+<span class="cmt"># ── original request headers ──</span>
+<span class="key">Content-Type</span>: application/json
+<span class="cmt"># Note: Authorization header is NOT forwarded unless you explicitly add it</span>
+<span class="code-label">HTTP Headers</span></code></pre>
+
+  <div class="callout warn">
+    <strong>Security note:</strong> Microservices should trust <code>X-User-*</code> headers <em>only</em> from the gateway. Use a Kubernetes <code>NetworkPolicy</code> to ensure that direct pod-to-pod traffic (bypassing the gateway) is blocked, otherwise any service could forge these headers.
+  </div>
+</div>
+
+
+<!-- ═══════════════════ 6. KONG EXTRAS ═══════════════════ -->
+<div class="section" id="kong-extras">
+  <div class="section-num">06 — Kong's Additional Capabilities</div>
+  <h2>What Kong Adds Over ingress-nginx</h2>
+
+  <p>The following capabilities are either unavailable or significantly harder to implement with ingress-nginx. They become relevant when the system grows and requirements evolve.</p>
+
+  <h3>1. Per-User (Consumer) Rate Limiting</h3>
+  <p>ingress-nginx can only rate-limit per IP address. Kong introduces a <code>KongConsumer</code> resource that maps an authenticated identity to a set of credentials and quotas. This means 100 users behind the same corporate NAT get their own individual quotas.</p>
+
+<pre><code><span class="cmt"># Step 1 — define a consumer (one per user/service account)</span>
+<span class="key">apiVersion</span>: <span class="val">configuration.konghq.com/v1</span>
+<span class="key">kind</span>: <span class="val">KongConsumer</span>
+<span class="key">metadata</span>:
+  <span class="key">name</span>: <span class="val">user-42</span>
+  <span class="key">annotations</span>:
+    <span class="ann">kubernetes.io/ingress.class</span>: <span class="str">"kong"</span>
+<span class="key">username</span>: <span class="val">user-42</span>
+
+<span class="cmt"># Step 2 — rate-limiting plugin scoped to that consumer</span>
+<span class="key">apiVersion</span>: <span class="val">configuration.konghq.com/v1</span>
+<span class="key">kind</span>: <span class="val">KongPlugin</span>
+<span class="key">metadata</span>:
+  <span class="key">name</span>: <span class="val">rate-limit-user-42</span>
+<span class="key">plugin</span>: <span class="val">rate-limiting</span>
+<span class="key">config</span>:
+  <span class="key">minute</span>: <span class="num">60</span>       <span class="cmt"># this user gets 60 req/min</span>
+  <span class="key">hour</span>:   <span class="num">2000</span>
+  <span class="key">policy</span>: <span class="val">redis</span>    <span class="cmt"># shared across all Kong replicas</span>
+  <span class="key">limit_by</span>: <span class="val">consumer</span>
+<span class="code-label">YAML</span></code></pre>
+
+  <h3>2. Dynamic Configuration via Admin API</h3>
+  <p>Every Kong plugin, route, and consumer can be created, updated, or deleted at runtime via the Admin API — without touching any Kubernetes resource and without reloading NGINX. This is essential for operations like temporarily increasing a rate limit for a VIP user or disabling a route during an incident.</p>
+
+<pre><code><span class="cmt"># Update a rate limit at runtime — zero downtime, no kubectl, no reload</span>
+curl -X PATCH http://kong-admin:8001/plugins/{plugin-id} \
+  -d <span class="str">'{"config": {"minute": 200}}'</span>
+
+<span class="cmt"># Add a new plugin to an existing route — takes effect immediately</span>
+curl -X POST http://kong-admin:8001/routes/{route-id}/plugins \
+  -d <span class="str">'{"name": "request-transformer", "config": {"remove": {"headers": ["Authorization"]}}}'</span>
+<span class="code-label">Shell</span></code></pre>
+
+  <h3>3. Request Transformer — Remove JWT from Upstream</h3>
+  <p>By default, the raw <code>Authorization: Bearer &lt;token&gt;</code> header is still forwarded to the microservice even after the gateway validates it. With Kong's <code>request-transformer</code> plugin, you can strip it out so microservices truly never see the JWT.</p>
+
+<pre><code><span class="key">apiVersion</span>: <span class="val">configuration.konghq.com/v1</span>
+<span class="key">kind</span>: <span class="val">KongPlugin</span>
+<span class="key">metadata</span>:
+  <span class="key">name</span>: <span class="val">clean-upstream-request</span>
+<span class="key">plugin</span>: <span class="val">request-transformer</span>
+<span class="key">config</span>:
+  <span class="key">remove</span>:
+    <span class="key">headers</span>:
+      - <span class="val">Authorization</span>        <span class="cmt"># JWT never reaches microservice</span>
+  <span class="key">add</span>:
+    <span class="key">headers</span>:
+      - <span class="str">"X-Request-Id:$(kong.request.id)"</span>  <span class="cmt"># add tracing ID</span>
+<span class="code-label">YAML</span></code></pre>
+
+  <h3>4. Active Health Checks</h3>
+  <p>ingress-nginx only does passive health checking — it discovers a pod is unhealthy <em>after</em> a real request fails. Kong actively polls upstream pods at a configurable interval, removing unhealthy instances before any user request hits them.</p>
+
+<pre><code><span class="key">apiVersion</span>: <span class="val">configuration.konghq.com/v1beta1</span>
+<span class="key">kind</span>: <span class="val">KongUpstream</span>
+<span class="key">metadata</span>:
+  <span class="key">name</span>: <span class="val">service-a-upstream</span>
+<span class="key">healthchecks</span>:
+  <span class="key">active</span>:
+    <span class="key">http_path</span>: <span class="val">/health</span>
+    <span class="key">healthy</span>:
+      <span class="key">interval</span>: <span class="num">5</span>       <span class="cmt"># check every 5 seconds</span>
+      <span class="key">successes</span>: <span class="num">2</span>
+    <span class="key">unhealthy</span>:
+      <span class="key">interval</span>: <span class="num">5</span>
+      <span class="key">http_failures</span>: <span class="num">3</span>  <span class="cmt"># 3 failures → remove from rotation</span>
+<span class="code-label">YAML</span></code></pre>
+
+  <h3>5. Observability Plugins (no extra infra config)</h3>
+  <p>With ingress-nginx, wiring Prometheus metrics or distributed tracing requires manually patching NGINX config or deploying extra exporters. In Kong, these are first-class plugins applied in minutes.</p>
+
+<pre><code><span class="cmt"># Prometheus metrics — Kong exposes /metrics automatically</span>
+<span class="key">apiVersion</span>: <span class="val">configuration.konghq.com/v1</span>
+<span class="key">kind</span>: <span class="val">KongClusterPlugin</span>
+<span class="key">metadata</span>:
+  <span class="key">name</span>: <span class="val">global-prometheus</span>
+  <span class="key">labels</span>:
+    <span class="ann">global</span>: <span class="str">"true"</span>    <span class="cmt"># applies to every route</span>
+<span class="key">plugin</span>: <span class="val">prometheus</span>
+
+<span class="cmt">---</span>
+<span class="cmt"># OpenTelemetry tracing</span>
+<span class="key">apiVersion</span>: <span class="val">configuration.konghq.com/v1</span>
+<span class="key">kind</span>: <span class="val">KongClusterPlugin</span>
+<span class="key">metadata</span>:
+  <span class="key">name</span>: <span class="val">global-tracing</span>
+  <span class="key">labels</span>:
+    <span class="ann">global</span>: <span class="str">"true"</span>
+<span class="key">plugin</span>: <span class="val">opentelemetry</span>
+<span class="key">config</span>:
+  <span class="key">endpoint</span>: <span class="str">"http://otel-collector:4318/v1/traces"</span>
+<span class="code-label">YAML</span></code></pre>
+
+  <h3>Summary: Kong vs ingress-nginx Capability Delta</h3>
+  <ul class="feature-list">
+    <li>
+      <span class="feat-head">Capability</span>
+      <span class="feat-head">ingress-nginx</span>
+      <span class="feat-head">Kong</span>
+    </li>
+    <li>
+      <span class="feat-name">Forward Auth</span>
+      <span class="feat-nginx"><span class="badge badge-green">auth-url annotation</span></span>
+      <span class="feat-kong"><span class="badge badge-green">forward-auth plugin</span></span>
+    </li>
+    <li>
+      <span class="feat-name">Rate limit — per IP</span>
+      <span class="feat-nginx"><span class="badge badge-green">limit-rps annotation</span></span>
+      <span class="feat-kong"><span class="badge badge-green">rate-limiting plugin</span></span>
+    </li>
+    <li>
+      <span class="feat-name">Rate limit — per user</span>
+      <span class="feat-nginx"><span class="badge badge-red">Not available</span></span>
+      <span class="feat-kong"><span class="badge badge-green">KongConsumer + plugin</span></span>
+    </li>
+    <li>
+      <span class="feat-name">Dynamic config (no restart)</span>
+      <span class="feat-nginx"><span class="badge badge-amber">NGINX reload required</span></span>
+      <span class="feat-kong"><span class="badge badge-green">Admin API, zero downtime</span></span>
+    </li>
+    <li>
+      <span class="feat-name">Remove JWT from upstream</span>
+      <span class="feat-nginx"><span class="badge badge-amber">Lua snippet needed</span></span>
+      <span class="feat-kong"><span class="badge badge-green">request-transformer plugin</span></span>
+    </li>
+    <li>
+      <span class="feat-name">Active health checks</span>
+      <span class="feat-nginx"><span class="badge badge-amber">Passive only (NGINX Plus: paid)</span></span>
+      <span class="feat-kong"><span class="badge badge-green">Built-in, configurable</span></span>
+    </li>
+    <li>
+      <span class="feat-name">Prometheus metrics</span>
+      <span class="feat-nginx"><span class="badge badge-amber">Separate exporter needed</span></span>
+      <span class="feat-kong"><span class="badge badge-green">One-line plugin</span></span>
+    </li>
+    <li>
+      <span class="feat-name">Distributed tracing</span>
+      <span class="feat-nginx"><span class="badge badge-amber">Manual NGINX config</span></span>
+      <span class="feat-kong"><span class="badge badge-green">OpenTelemetry plugin</span></span>
+    </li>
+    <li>
+      <span class="feat-name">Canary / traffic split</span>
+      <span class="feat-nginx"><span class="badge badge-amber">Basic weight annotation</span></span>
+      <span class="feat-kong"><span class="badge badge-green">Canary plugin (flexible)</span></span>
+    </li>
+    <li>
+      <span class="feat-name">Operational complexity</span>
+      <span class="feat-nginx"><span class="badge badge-green">Low</span></span>
+      <span class="feat-kong"><span class="badge badge-amber">Medium</span></span>
+    </li>
+  </ul>
+</div>
+
+
+<!-- ═══════════════════ 7. CONCLUSION ═══════════════════ -->
+<div class="section" id="conclusion">
+  <div class="section-num">07 — Conclusion</div>
+  <h2>Recommendation</h2>
+
+  <p>Both ingress-nginx and Kong can implement centralized forward auth and basic rate limiting. The right choice depends on where the system is heading, not just where it is today.</p>
+
+  <div class="conclusion-grid">
+    <div class="conclusion-card nginx">
+      <div class="c-title">Stay with ingress-nginx</div>
+      <div class="c-sub">If simplicity and speed of delivery are the priority</div>
+      <ul>
+        <li>Zero new infrastructure to deploy</li>
+        <li>Forward auth works with 2 annotations</li>
+        <li>Per-IP rate limiting is sufficient</li>
+        <li>Team is already familiar with annotations</li>
+        <li>Future per-user limits are not a known requirement</li>
+        <li>Observability is handled at a different layer</li>
+      </ul>
+    </div>
+    <div class="conclusion-card kong">
+      <div class="c-title">Migrate to Kong</div>
+      <div class="c-sub">If growth and advanced API management are expected</div>
+      <ul>
+        <li>Per-user / per-consumer rate limiting is needed</li>
+        <li>Config changes must take effect without any downtime</li>
+        <li>Multiple plugins are needed across different routes</li>
+        <li>Observability at the gateway layer is important</li>
+        <li>You anticipate canary deployments or A/B testing</li>
+        <li>Team is willing to invest in a slightly higher setup cost</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout info">
+    <strong>Practical migration path:</strong> There is no need to choose everything up front. A low-risk approach is to start with ingress-nginx (it is already there, it works), implement the forward-auth pattern and basic rate limiting, and <strong>set a threshold</strong>: if per-user rate limiting or dynamic config changes become requirements, migrate to Kong at that point. The auth service code does not change — only the gateway configuration does.
+  </div>
+
+  <h3>Decision Flowchart</h3>
+  <div class="diagram-wrap">
+    <svg width="100%" viewBox="0 0 820 260" role="img">
+      <title>Decision flowchart: Kong vs ingress-nginx</title>
+      <desc>Flowchart guiding the choice between staying with ingress-nginx or migrating to Kong</desc>
+      <defs>
+        <marker id="arrd" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M2 1L8 5L2 9" fill="none" stroke="#7a7d8c" stroke-width="1.5" stroke-linecap="round"/>
+        </marker>
+      </defs>
+
+      <!-- Start -->
+      <rect x="20" y="108" width="160" height="44" rx="22" fill="#eef0f4" stroke="#c8cbd6" stroke-width="1.2"/>
+      <text x="100" y="130" text-anchor="middle" font-family="Sora,sans-serif" font-size="13" font-weight="500" fill="#0f1117" dominant-baseline="central">Current setup</text>
+
+      <line x1="180" y1="130" x2="220" y2="130" stroke="#7a7d8c" stroke-width="1.2" marker-end="url(#arrd)"/>
+
+      <!-- Q1 -->
+      <rect x="222" y="108" width="200" height="44" rx="8" fill="#fff3cd" stroke="#f0c040" stroke-width="1.2"/>
+      <text x="322" y="127" text-anchor="middle" font-family="Sora,sans-serif" font-size="12" font-weight="500" fill="#9a6200" dominant-baseline="central">Need per-user</text>
+      <text x="322" y="143" text-anchor="middle" font-family="Sora,sans-serif" font-size="12" font-weight="500" fill="#9a6200" dominant-baseline="central">rate limiting?</text>
+
+      <!-- Yes → Q2 -->
+      <line x1="422" y1="130" x2="460" y2="130" stroke="#7a7d8c" stroke-width="1.2" marker-end="url(#arrd)"/>
+      <text x="441" y="123" text-anchor="middle" font-family="DM Sans,sans-serif" font-size="11" fill="#0a7c52">Yes</text>
+
+      <!-- Q2 -->
+      <rect x="462" y="108" width="200" height="44" rx="8" fill="#fff3cd" stroke="#f0c040" stroke-width="1.2"/>
+      <text x="562" y="127" text-anchor="middle" font-family="Sora,sans-serif" font-size="12" font-weight="500" fill="#9a6200" dominant-baseline="central">Need dynamic config</text>
+      <text x="562" y="143" text-anchor="middle" font-family="Sora,sans-serif" font-size="12" font-weight="500" fill="#9a6200" dominant-baseline="central">or advanced plugins?</text>
+
+      <!-- Yes → Kong -->
+      <line x1="662" y1="130" x2="700" y2="130" stroke="#7a7d8c" stroke-width="1.2" marker-end="url(#arrd)"/>
+      <text x="681" y="123" text-anchor="middle" font-family="DM Sans,sans-serif" font-size="11" fill="#0a7c52">Yes</text>
+      <rect x="702" y="108" width="100" height="44" rx="8" fill="#e8f0ff" stroke="#93b4f5" stroke-width="1.5"/>
+      <text x="752" y="130" text-anchor="middle" font-family="Sora,sans-serif" font-size="13" font-weight="600" fill="#0050e6" dominant-baseline="central">Use Kong</text>
+
+      <!-- No from Q1 → NGINX -->
+      <line x1="322" y1="152" x2="322" y2="195" stroke="#7a7d8c" stroke-width="1.2" marker-end="url(#arrd)"/>
+      <text x="332" y="178" font-family="DM Sans,sans-serif" font-size="11" fill="#c0392b">No</text>
+      <rect x="222" y="197" width="200" height="44" rx="8" fill="#e3f5ee" stroke="#7ecfb0" stroke-width="1.5"/>
+      <text x="322" y="219" text-anchor="middle" font-family="Sora,sans-serif" font-size="13" font-weight="600" fill="#044d32" dominant-baseline="central">Stay with NGINX</text>
+
+      <!-- No from Q2 → NGINX too -->
+      <line x1="562" y1="152" x2="562" y2="219" stroke="#7a7d8c" stroke-width="1.2" marker-end="url(#arrd)"/>
+      <text x="572" y="186" font-family="DM Sans,sans-serif" font-size="11" fill="#c0392b">No</text>
+      <line x1="562" y1="219" x2="424" y2="219" stroke="#7a7d8c" stroke-width="1.2" marker-end="url(#arrd)"/>
+    </svg>
+    <div class="diagram-caption">Figure 3 — Decision tree: when to choose Kong over ingress-nginx</div>
+  </div>
+
+  <h3>Final Recommendation</h3>
+  <p>
+    <strong>Short term:</strong> implement forward auth and per-IP rate limiting using the existing ingress-nginx deployment. This solves the immediate problem (centralized auth + basic rate limiting) with zero new infrastructure and can be done today.
+  </p>
+  <p>
+    <strong>Medium term:</strong> if the system grows beyond 10–15 microservices, if per-user quotas become a product requirement, or if the team needs to change gateway config without touching Kubernetes manifests — plan a migration to Kong. The migration is not disruptive: Kong can be installed alongside ingress-nginx and routes migrated one by one.
+  </p>
+
+  <div class="callout solution">
+    <strong>Bottom line:</strong> ingress-nginx for simplicity and speed; Kong when you need per-user rate limiting, zero-downtime config changes, and a growing plugin ecosystem. The choice is not permanent — the auth service contract (validate JWT → return X-User-* headers) stays the same regardless of which gateway sits in front of it.
+  </div>
+</div>
+
+<!-- ═══════════════════ 8. REFERENCES ═══════════════════ -->
+<div class="section" id="references">
+  <div class="section-num">08 — References</div>
+  <h2>Further reading</h2>
+  <p>External articles comparing API gateway patterns and Kong, NGINX, and Envoy:</p>
+  <ul>
+    <li><a href="https://freedium-mirror.cfd/https://medium.com/@hydrurdgn/api-gateway-patterns-for-microservices-comparing-kong-nginx-and-envoy-eb899f5bbebd" rel="noopener noreferrer">API Gateway Patterns for Microservices: Comparing Kong, Nginx and Envoy</a> — Medium (@hydrurdgn)</li>
+    <li><a href="https://freedium-mirror.cfd/https://medium.com/@kanhaaggarwal/kong-vs-nginx-vs-envoy-the-harsh-truth-about-choosing-the-right-api-gateway-58b2afa9dad2" rel="noopener noreferrer">Kong vs Nginx vs Envoy: The Harsh Truth About Choosing the Right API Gateway</a> — Medium (@kanhaaggarwal)</li>
+  </ul>
+</div>
+
+<hr class="divider">
+<p style="font-size:12px;color:#b0b3c1;text-align:center;padding-bottom:2rem">Generated as a technical reference document by Backend Team · Architecture Decision Record</p>
+
+</div>
+</body>
+</html>
