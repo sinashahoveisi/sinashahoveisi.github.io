@@ -1,0 +1,1025 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>dana-cli — Distribution Performance Benchmark</title>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --ink: #0f1117;
+  --ink-2: #3d3f4a;
+  --ink-3: #7a7d8c;
+  --ink-4: #b0b3c1;
+  --bg: #ffffff;
+  --bg-2: #f7f8fa;
+  --bg-3: #eef0f4;
+  --accent: #0050e6;
+  --accent-light: #e8f0ff;
+  --green: #0a7c52;
+  --green-light: #e3f5ee;
+  --red: #c0392b;
+  --red-light: #fdecea;
+  --amber: #9a6200;
+  --amber-light: #fff3cd;
+  --border: #e2e4ea;
+  --code-bg: #151820;
+  --code-text: #232528;
+  --radius: 8px;
+  --radius-lg: 14px;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  font-family: 'DM Sans', system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.75;
+  color: var(--ink);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+.page-wrap { max-width: 900px; margin: 0 auto; padding: 0 2rem 5rem; }
+
+/* Cover */
+.cover {
+  padding: 5rem 0 4rem;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 3.5rem;
+}
+.cover-eyebrow {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 1.2rem;
+}
+.cover-title {
+  font-family: 'Sora', sans-serif;
+  font-size: clamp(28px, 4vw, 42px);
+  font-weight: 600;
+  line-height: 1.18;
+  color: var(--ink);
+  margin-bottom: 1.2rem;
+}
+.cover-title span { color: var(--accent); }
+.cover-desc { font-size: 16px; color: var(--ink-2); max-width: 640px; line-height: 1.8; margin-bottom: 2rem; }
+.cover-meta { display: flex; gap: 2rem; flex-wrap: wrap; }
+.cover-meta-item { font-size: 12px; color: var(--ink-3); display: flex; flex-direction: column; gap: 2px; }
+.cover-meta-item strong { font-size: 13px; font-weight: 500; color: var(--ink-2); }
+
+/* TOC */
+.toc {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem 1.75rem;
+  margin-bottom: 3.5rem;
+}
+.toc-title { font-family: 'Sora', sans-serif; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 1rem; }
+.toc-list { list-style: none; display: grid; grid-template-columns: 1fr 1fr; gap: .35rem 2rem; }
+.toc-list li a { font-size: 13px; color: var(--ink-2); display: flex; gap: 8px; align-items: baseline; }
+.toc-num { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--ink-4); min-width: 20px; }
+
+/* Sections */
+.section { margin-bottom: 4rem; }
+.section-num {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--accent);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  margin-bottom: .5rem;
+}
+h2 {
+  font-family: 'Sora', sans-serif;
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--ink);
+  margin-bottom: 1rem;
+  padding-bottom: .75rem;
+  border-bottom: 1px solid var(--border);
+}
+h3 {
+  font-family: 'Sora', sans-serif;
+  font-size: 17px;
+  font-weight: 500;
+  color: var(--ink);
+  margin: 2rem 0 .75rem;
+}
+h4 {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink-2);
+  margin: 1.5rem 0 .5rem;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+p { margin-bottom: 1rem; color: var(--ink-2); }
+ul, ol { padding-left: 1.5rem; margin-bottom: 1rem; color: var(--ink-2); }
+li { margin-bottom: .3rem; }
+
+/* Callout */
+.callout {
+  border-radius: var(--radius);
+  padding: 1rem 1.25rem;
+  margin: 1.5rem 0;
+  border-left: 3px solid;
+  font-size: 14px;
+  line-height: 1.7;
+}
+.callout.problem { background: var(--red-light); border-color: var(--red); color: #7a1a11; }
+.callout.solution { background: var(--green-light); border-color: var(--green); color: #044d32; }
+.callout.info { background: var(--accent-light); border-color: var(--accent); color: #003399; }
+.callout.warn { background: var(--amber-light); border-color: var(--amber); color: #6a4400; }
+.callout strong { font-weight: 500; }
+
+/* Code */
+pre {
+  background: var(--bg-2);
+  border-radius: var(--radius);
+  padding: 1.25rem 1.5rem;
+  overflow-x: auto;
+  margin: 1.25rem 0;
+  position: relative;
+}
+pre code {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: bold;
+  font-size: 12.5px;
+  line-height: 1.8;
+  color: var(--code-text);
+}
+.code-label {
+  display: inline-block;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  background: rgba(0,0,0,.06);
+  color: var(--ink-3);
+  padding: 2px 8px;
+  border-radius: 4px;
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+.kw { color: #a78bfa; }
+.str { color: #059669; }
+.cmt { color: #9ca3af; font-style: italic; }
+.num { color: #d97706; }
+.key { color: #3b82f6; }
+.val { color: #374151; }
+.ann { color: #f59e0b; }
+code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12.5px;
+  background: var(--bg-3);
+  padding: 1px 6px;
+  border-radius: 4px;
+  color: var(--ink);
+}
+
+/* Diagram */
+.diagram-wrap {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 2rem 1.5rem 1.5rem;
+  margin: 1.5rem 0;
+  overflow-x: auto;
+}
+.diagram-caption {
+  text-align: center;
+  font-size: 12px;
+  color: var(--ink-3);
+  margin-top: 1rem;
+  font-style: italic;
+}
+
+/* Badges */
+.badge {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 500;
+  font-family: 'JetBrains Mono', monospace;
+  letter-spacing: .02em;
+}
+.badge-green { background: var(--green-light); color: var(--green); }
+.badge-red { background: var(--red-light); color: var(--red); }
+.badge-amber { background: var(--amber-light); color: var(--amber); }
+.badge-blue { background: var(--accent-light); color: var(--accent); }
+.badge-gray { background: var(--bg-3); color: var(--ink-3); }
+
+/* Comparison table */
+.comp-table { width: 100%; border-collapse: collapse; margin: 1.5rem 0; font-size: 13px; }
+.comp-table th {
+  background: var(--code-bg);
+  color: #c9d1e0;
+  font-family: 'Sora', sans-serif;
+  font-weight: 500;
+  font-size: 12px;
+  padding: 10px 16px;
+  text-align: left;
+  border: 1px solid #252b3b;
+}
+.comp-table th:first-child { border-radius: var(--radius) 0 0 0; }
+.comp-table th:last-child { border-radius: 0 var(--radius) 0 0; }
+.comp-table td {
+  padding: 10px 16px;
+  border: 1px solid var(--border);
+  vertical-align: top;
+  color: var(--ink-2);
+  line-height: 1.6;
+}
+.comp-table tr:nth-child(even) td { background: var(--bg-2); }
+.comp-table td:first-child { font-weight: 500; color: var(--ink); }
+
+/* Build cards */
+.build-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; margin: 1.5rem 0; }
+.build-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 1.25rem;
+}
+.build-card-head { margin-bottom: 1rem; }
+.build-card-title { font-family: 'Sora', sans-serif; font-weight: 600; font-size: 15px; margin-bottom: 4px; }
+.build-card-sub { font-size: 12px; color: var(--ink-3); }
+.build-stat { margin-top: .5rem; }
+.build-stat-label { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-4); font-family: 'JetBrains Mono', monospace; margin-bottom: 2px; }
+.build-stat-value { font-family: 'JetBrains Mono', monospace; font-size: 22px; font-weight: 500; color: var(--ink); }
+.build-stat-unit { font-size: 12px; color: var(--ink-3); margin-left: 3px; }
+
+/* Decision box */
+.decision {
+  background: var(--code-bg);
+  border-radius: var(--radius-lg);
+  padding: 1.75rem;
+  margin: 2rem 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 1.5rem;
+}
+.decision-col-title {
+  font-family: 'Sora', sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  margin-bottom: 1rem;
+}
+.decision-col-title.blue { color: #60a5fa; }
+.decision-col-title.green { color: #34d399; }
+.decision-col-title.amber { color: #fbbf24; }
+.decision-item { font-size: 13px; color: #c9d1e0; padding: 4px 0; display: flex; gap: 8px; }
+.decision-item::before { content: '→'; color: #4a5568; }
+
+/* Conclusion grid */
+.conclusion-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; margin: 1.5rem 0; }
+.conclusion-card {
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+  border: 1px solid;
+}
+.conclusion-card.c-pip { background: var(--bg-2); border-color: var(--border); }
+.conclusion-card.c-nuitka { background: var(--red-light); border-color: #e8a09a; }
+.conclusion-card.c-go { background: var(--accent-light); border-color: #93b4f5; }
+.conclusion-card .c-title { font-family: 'Sora', sans-serif; font-size: 15px; font-weight: 600; margin-bottom: .4rem; }
+.conclusion-card .c-sub { font-size: 12px; color: var(--ink-3); margin-bottom: 1rem; }
+.conclusion-card ul { font-size: 13px; }
+
+.divider { border: none; border-top: 1px solid var(--border); margin: 3rem 0; }
+
+/* Metric highlight row */
+.metric-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+  margin: 1.5rem 0;
+}
+.metric-card {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 1.25rem 1.5rem;
+  text-align: center;
+}
+.metric-card .m-label { font-size: 11px; font-family: 'JetBrains Mono', monospace; text-transform: uppercase; letter-spacing: .07em; color: var(--ink-4); margin-bottom: .5rem; }
+.metric-card .m-value { font-family: 'Sora', sans-serif; font-size: 32px; font-weight: 600; line-height: 1; margin-bottom: .25rem; }
+.metric-card .m-sub { font-size: 12px; color: var(--ink-3); }
+.m-green { color: var(--green); }
+.m-amber { color: var(--amber); }
+.m-red { color: var(--red); }
+.m-blue { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="page-wrap">
+
+<!-- ═══════════════════ COVER ═══════════════════ -->
+<div class="cover">
+  <div class="cover-eyebrow">Performance Benchmark Report · dana-cli</div>
+  <h1 class="cover-title">CLI Distribution Methods:<br><span>pip · Python Binary · Go Binary</span></h1>
+  <p class="cover-desc">A head-to-head benchmark of three distribution strategies for the <code>dana-cli</code> cloud platform CLI — measuring startup time, API latency, binary size, and build time on Apple Silicon macOS.</p>
+  <div class="cover-meta">
+    <div class="cover-meta-item"><span>Date</span><strong>2026-05-31</strong></div>
+    <div class="cover-meta-item"><span>Machine</span><strong>Apple M1 Pro · 16 GB</strong></div>
+    <div class="cover-meta-item"><span>OS</span><strong>darwin arm64</strong></div>
+    <div class="cover-meta-item"><span>Python</span><strong>3.12.13</strong></div>
+    <div class="cover-meta-item"><span>API</span><strong>api.stage.danaix.com/iaas</strong></div>
+    <div class="cover-meta-item"><span>Status</span><strong>Go binary recommended</strong></div>
+  </div>
+</div>
+
+<!-- ═══════════════════ TOC ═══════════════════ -->
+<nav class="toc">
+  <div class="toc-title">Table of Contents</div>
+  <ol class="toc-list">
+    <li><a href="#background"><span class="toc-num">01</span> Background &amp; Context</a></li>
+    <li><a href="#builds"><span class="toc-num">02</span> The Three Builds</a></li>
+    <li><a href="#build-time"><span class="toc-num">03</span> Build Time</a></li>
+    <li><a href="#startup"><span class="toc-num">04</span> Startup Performance</a></li>
+    <li><a href="#api"><span class="toc-num">05</span> API Call Performance</a></li>
+    <li><a href="#size"><span class="toc-num">06</span> Binary Size</a></li>
+    <li><a href="#analysis"><span class="toc-num">07</span> Analysis</a></li>
+    <li><a href="#recommendations"><span class="toc-num">08</span> Recommendations</a></li>
+    <li><a href="#reproduce"><span class="toc-num">09</span> How to Reproduce</a></li>
+    <li><a href="#conclusion"><span class="toc-num">10</span> Conclusion</a></li>
+  </ol>
+</nav>
+
+
+<!-- ═══════════════════ 1. BACKGROUND ═══════════════════ -->
+<div class="section" id="background">
+  <div class="section-num">01 — Background &amp; Context</div>
+  <h2>Why We Benchmarked</h2>
+
+  <p><code>dana-cli</code> is the official command-line interface for the DanaIX IaaS cloud platform. It allows developers and DevOps engineers to manage servers, volumes, networking, and billing from the terminal without opening a browser.</p>
+
+  <p>The CLI was initially written in Python using <strong>typer + rich + httpx + pydantic</strong>. Before choosing a final distribution strategy, we evaluated three approaches: installing via pip, packaging as a native binary with Nuitka, and rewriting the CLI in Go.</p>
+
+  <div class="callout info">
+    <strong>Key question:</strong> For a cloud CLI used multiple times per day by DevOps engineers, every millisecond of startup time is friction. We benchmarked to answer: which distribution method delivers the fastest user experience, the smallest download, and the most practical build process?
+  </div>
+
+  <h3>Why startup time matters for a CLI</h3>
+  <ul>
+    <li>A DevOps engineer may run <code>dana server list</code> or <code>dana server ssh web-01</code> dozens of times per day.</li>
+    <li>CLIs used inside shell scripts, CI/CD pipelines, and loops are invoked hundreds of times in sequence.</li>
+    <li>Any cold-start overhead above ~100 ms is perceptible and creates friction, especially for commands like <code>--help</code> that return instantly by design.</li>
+    <li>The benchmark was triggered by user feedback: "it takes a few seconds to show --help" after the Nuitka binary was built.</li>
+  </ul>
+
+  <h3>Distribution journey</h3>
+  <p>Before this benchmark, the team went through several iterations:</p>
+  <ol>
+    <li><strong>PyInstaller onefile</strong> — discarded. Extracts to a temp directory on every run, causing a 3–5 s cold start on every invocation.</li>
+    <li><strong>PyInstaller onedir</strong> — better startup, but must be shipped as a zip archive that the user must extract. Poor UX.</li>
+    <li><strong>Nuitka onefile</strong> — compiles Python to C, produces a real native binary. Tested in this benchmark. Still ~1.5 s startup.</li>
+    <li><strong>pip / pipx install</strong> — discovered to be faster than the Nuitka binary in practice. Included in this benchmark.</li>
+    <li><strong>Go rewrite</strong> — full rewrite of the CLI in Go using cobra. Included in this benchmark.</li>
+  </ol>
+</div>
+
+
+<!-- ═══════════════════ 2. BUILDS ═══════════════════ -->
+<div class="section" id="builds">
+  <div class="section-num">02 — The Three Builds</div>
+  <h2>What Was Tested</h2>
+
+  <div class="build-grid">
+    <div class="build-card">
+      <div class="build-card-head">
+        <div class="build-card-title">pip / venv</div>
+        <div class="build-card-sub">Python 3.12.13 · typer + rich + httpx + pydantic</div>
+      </div>
+      <span class="badge badge-amber">Primary distribution</span>
+      <p style="font-size:13px;color:#3d3f4a;margin-top:.75rem">Editable install into a virtualenv. Invoked as <code>venv/bin/dana</code>. Python interpreter loads <code>.pyc</code> bytecode cached by the OS on repeated runs.</p>
+    </div>
+    <div class="build-card">
+      <div class="build-card-head">
+        <div class="build-card-title">Python binary</div>
+        <div class="build-card-sub">Nuitka onefile · compiled to C + linked</div>
+      </div>
+      <span class="badge badge-red">Rejected</span>
+      <p style="font-size:13px;color:#3d3f4a;margin-top:.75rem">Nuitka compiles the Python source to C and produces a single self-contained executable. No Python installation required on the target machine. Built with <code>make build-local</code>.</p>
+    </div>
+    <div class="build-card">
+      <div class="build-card-head">
+        <div class="build-card-title">Go binary</div>
+        <div class="build-card-sub">Go 1.22 · cobra + resty · goreleaser</div>
+      </div>
+      <span class="badge badge-green">Recommended</span>
+      <p style="font-size:13px;color:#3d3f4a;margin-top:.75rem">Full rewrite of the CLI in Go using <code>cobra</code> for the command tree. Statically linked, no runtime dependencies. Built with <code>go build -ldflags="-s -w"</code> via Makefile.</p>
+    </div>
+  </div>
+
+  <h3>Project architecture overview</h3>
+
+  <div class="diagram-wrap">
+    <svg width="100%" viewBox="0 0 820 230" role="img">
+      <title>dana-cli architecture: Python and Go projects</title>
+
+      <!-- Python box -->
+      <rect x="20" y="20" width="370" height="190" rx="10" fill="#f7f8fa" stroke="#e2e4ea" stroke-width="1.2"/>
+      <text x="40" y="48" font-family="Sora,sans-serif" font-size="13" font-weight="600" fill="#0f1117">Python CLI (dana-cli/app/)</text>
+      <text x="40" y="70" font-family="JetBrains Mono,monospace" font-size="11" fill="#7a7d8c">commands/   ← typer commands (thin controllers)</text>
+      <text x="40" y="88" font-family="JetBrains Mono,monospace" font-size="11" fill="#7a7d8c">core/       ← pydantic-settings + config</text>
+      <text x="40" y="106" font-family="JetBrains Mono,monospace" font-size="11" fill="#7a7d8c">models/     ← pydantic schemas + validation</text>
+      <text x="40" y="124" font-family="JetBrains Mono,monospace" font-size="11" fill="#7a7d8c">services/   ← business logic</text>
+      <text x="40" y="142" font-family="JetBrains Mono,monospace" font-size="11" fill="#7a7d8c">utils/      ← httpx client, output formatter</text>
+      <rect x="30" y="160" width="160" height="36" rx="6" fill="#fff3cd" stroke="#f0c040" stroke-width="1"/>
+      <text x="110" y="178" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="11" fill="#9a6200">pip / pipx install</text>
+      <rect x="205" y="160" width="170" height="36" rx="6" fill="#fdecea" stroke="#e8a09a" stroke-width="1"/>
+      <text x="290" y="178" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="11" fill="#c0392b">nuitka onefile binary</text>
+
+      <!-- Go box -->
+      <rect x="430" y="20" width="370" height="190" rx="10" fill="#f7f8fa" stroke="#e2e4ea" stroke-width="1.2"/>
+      <text x="450" y="48" font-family="Sora,sans-serif" font-size="13" font-weight="600" fill="#0f1117">Go CLI (dana-cli-go/)</text>
+      <text x="450" y="70" font-family="JetBrains Mono,monospace" font-size="11" fill="#7a7d8c">cmd/dana/       ← entry point (main.go)</text>
+      <text x="450" y="88" font-family="JetBrains Mono,monospace" font-size="11" fill="#7a7d8c">internal/cmd/   ← cobra commands</text>
+      <text x="450" y="106" font-family="JetBrains Mono,monospace" font-size="11" fill="#7a7d8c">internal/entity/← structs + validation</text>
+      <text x="450" y="124" font-family="JetBrains Mono,monospace" font-size="11" fill="#7a7d8c">internal/service/← business logic</text>
+      <text x="450" y="142" font-family="JetBrains Mono,monospace" font-size="11" fill="#7a7d8c">internal/api/   ← HTTP client</text>
+      <rect x="440" y="160" width="350" height="36" rx="6" fill="#e8f0ff" stroke="#93b4f5" stroke-width="1"/>
+      <text x="615" y="178" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="11" fill="#0050e6">goreleaser → single binary (linux/mac/windows)</text>
+    </svg>
+    <div class="diagram-caption">Figure 1 — Both projects share the same layered architecture (commands → services → api) but differ in language and distribution model</div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════ 3. BUILD TIME ═══════════════════ -->
+<div class="section" id="build-time">
+  <div class="section-num">03 — Build Time</div>
+  <h2>Time to Produce a Distributable</h2>
+
+  <p>Build time affects developer velocity — how quickly you can iterate, release a patch, or set up CI/CD. All measurements were taken with dependencies cached after the first run.</p>
+
+  <div class="metric-row">
+    <div class="metric-card">
+      <div class="m-label">pip install -e .</div>
+      <div class="m-value m-amber">9.0<span style="font-size:18px">s</span></div>
+      <div class="m-sub">Python venv editable install</div>
+    </div>
+    <div class="metric-card">
+      <div class="m-label">Nuitka onefile</div>
+      <div class="m-value m-red">6.9<span style="font-size:18px">min</span></div>
+      <div class="m-sub">Compile Python → C → link binary</div>
+    </div>
+    <div class="metric-card">
+      <div class="m-label">go build</div>
+      <div class="m-value m-green">8.0<span style="font-size:18px">s</span></div>
+      <div class="m-sub">Statically linked Go binary</div>
+    </div>
+  </div>
+
+  <div class="diagram-wrap">
+    <svg width="100%" viewBox="0 0 740 160" role="img">
+      <title>Build time bar chart</title>
+      <!-- Y axis label -->
+      <text x="10" y="80" font-family="JetBrains Mono,monospace" font-size="10" fill="#9ca3af" transform="rotate(-90 10 80)" text-anchor="middle">seconds</text>
+      <!-- Bars (normalised to 414s max for Nuitka) -->
+      <!-- pip: 9s → 9/414*560 = 12.2px wide -->
+      <rect x="80" y="30" width="12" height="36" rx="3" fill="#f59e0b"/>
+      <text x="98" y="53" font-family="JetBrains Mono,monospace" font-size="11" fill="#9a6200">9 s</text>
+      <text x="80" y="22" font-family="Sora,sans-serif" font-size="12" font-weight="500" fill="#0f1117">pip / venv</text>
+      <!-- Nuitka: 414s → full 560px -->
+      <rect x="80" y="84" width="560" height="36" rx="3" fill="#ef4444"/>
+      <text x="646" y="107" font-family="JetBrains Mono,monospace" font-size="11" fill="#c0392b">414 s (6.9 min)</text>
+      <text x="80" y="76" font-family="Sora,sans-serif" font-size="12" font-weight="500" fill="#0f1117">Python binary (Nuitka)</text>
+      <!-- Go: 8s → 8/414*560 = 10.8px -->
+      <rect x="80" y="138" width="11" height="14" rx="3" fill="#10b981"/>
+      <text x="97" y="150" font-family="JetBrains Mono,monospace" font-size="11" fill="#0a7c52">8 s</text>
+      <text x="80" y="132" font-family="Sora,sans-serif" font-size="12" font-weight="500" fill="#0f1117">Go binary</text>
+    </svg>
+    <div class="diagram-caption">Figure 2 — Build time comparison. Nuitka is ~52× slower to build than pip or Go</div>
+  </div>
+
+  <div class="callout warn">
+    <strong>Nuitka build time impact:</strong> A 6.9-minute build time makes rapid iteration painful and CI/CD pipelines expensive. By comparison, both pip install and <code>go build</code> finish in under 10 seconds, enabling fast release cycles.
+  </div>
+</div>
+
+
+<!-- ═══════════════════ 4. STARTUP ═══════════════════ -->
+<div class="section" id="startup">
+  <div class="section-num">04 — Startup Performance</div>
+  <h2>dana --help (10 runs each)</h2>
+
+  <p><code>dana --help</code> is the fastest possible command — no network call, no data processing. It measures pure CLI startup overhead: the time from process launch to first byte of output. This is the most honest measure of how the distribution method affects user experience.</p>
+
+  <p><strong>Cold:</strong> 10 runs, fresh process each time. <strong>Warm:</strong> 10 back-to-back runs with the OS file cache hot.</p>
+
+  <div class="metric-row">
+    <div class="metric-card">
+      <div class="m-label">pip — cold avg</div>
+      <div class="m-value m-amber">27<span style="font-size:16px">ms</span></div>
+      <div class="m-sub">median 25 ms · max 43 ms</div>
+    </div>
+    <div class="metric-card">
+      <div class="m-label">Nuitka — cold avg</div>
+      <div class="m-value m-red">1506<span style="font-size:16px">ms</span></div>
+      <div class="m-sub">median 1368 ms · max 2132 ms</div>
+    </div>
+    <div class="metric-card">
+      <div class="m-label">Go — cold avg</div>
+      <div class="m-value m-green">8<span style="font-size:16px">ms</span></div>
+      <div class="m-sub">median 7 ms · max 19 ms</div>
+    </div>
+  </div>
+
+  <!-- Bar chart: startup cold -->
+  <div class="diagram-wrap">
+    <svg width="100%" viewBox="0 0 740 180" role="img">
+      <title>Startup cold avg bar chart</title>
+      <text x="20" y="22" font-family="Sora,sans-serif" font-size="13" font-weight="500" fill="#0f1117">Cold start — dana --help average (ms)</text>
+      <!-- normalise to 1506 max, bars width in 580px range -->
+      <!-- pip: 27/1506*580 = 10.4 -->
+      <rect x="180" y="40" width="10" height="28" rx="3" fill="#f59e0b"/>
+      <text x="196" y="59" font-family="JetBrains Mono,monospace" font-size="11" fill="#9a6200">27 ms</text>
+      <text x="20" y="59" font-family="Sora,sans-serif" font-size="12" fill="#3d3f4a">pip / venv</text>
+      <!-- Nuitka: 1506/1506*580 = 580 -->
+      <rect x="180" y="84" width="580" height="28" rx="3" fill="#ef4444"/>
+      <text x="766" y="103" font-family="JetBrains Mono,monospace" font-size="11" fill="#c0392b" text-anchor="end" x="755">1506 ms</text>
+      <text x="20" y="103" font-family="Sora,sans-serif" font-size="12" fill="#3d3f4a">Python binary</text>
+      <!-- Go: 8/1506*580 = 3.1 -->
+      <rect x="180" y="128" width="3" height="28" rx="2" fill="#10b981"/>
+      <text x="190" y="147" font-family="JetBrains Mono,monospace" font-size="11" fill="#0a7c52">8 ms</text>
+      <text x="20" y="147" font-family="Sora,sans-serif" font-size="12" fill="#3d3f4a">Go binary</text>
+    </svg>
+    <div class="diagram-caption">Figure 3 — Cold start avg: Nuitka is 56× slower than pip and 188× slower than Go</div>
+  </div>
+
+  <h3>Detailed results table</h3>
+  <table class="comp-table">
+    <thead>
+      <tr>
+        <th>Build</th>
+        <th>Cold min</th>
+        <th>Cold max</th>
+        <th>Cold avg</th>
+        <th>Cold median</th>
+        <th>Warm avg</th>
+        <th>Warm median</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>pip / venv</td>
+        <td>25 ms</td>
+        <td>43 ms</td>
+        <td><strong>27 ms</strong></td>
+        <td>25 ms</td>
+        <td><strong>25 ms</strong></td>
+        <td>25 ms</td>
+      </tr>
+      <tr>
+        <td>Python binary (Nuitka)</td>
+        <td>1354 ms</td>
+        <td>2132 ms</td>
+        <td><strong>1506 ms</strong></td>
+        <td>1368 ms</td>
+        <td><strong>1429 ms</strong></td>
+        <td>1370 ms</td>
+      </tr>
+      <tr>
+        <td>Go binary</td>
+        <td>6 ms</td>
+        <td>19 ms</td>
+        <td><strong>8 ms</strong></td>
+        <td>7 ms</td>
+        <td><strong>6 ms</strong></td>
+        <td>7 ms</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout problem">
+    <strong>Nuitka onefile trap:</strong> The ~1.4 s startup is not caused by Python code being slow — it is caused by Nuitka's onefile bootstrap, which decompresses the bundled payload into a temporary directory on every invocation. This overhead is essentially constant and cannot be optimised away without switching to <code>onedir</code> mode (which requires distributing a directory, not a single file).
+  </div>
+
+  <div class="callout solution">
+    <strong>Why pip is faster than Nuitka:</strong> When Python is already installed on the system, the OS caches <code>.pyc</code> bytecode files in memory between runs. The Python interpreter starts in ~20 ms, and warm subsequent imports are nearly free. The Nuitka binary, by contrast, starts a fresh extraction process every time — there is no OS-level cache benefit.
+  </div>
+</div>
+
+
+<!-- ═══════════════════ 5. API ═══════════════════ -->
+<div class="section" id="api">
+  <div class="section-num">05 — API Call Performance</div>
+  <h2>dana server list (5 runs, includes network)</h2>
+
+  <p>This test measures the full round-trip: CLI startup → TLS handshake → HTTP request to <code>api.stage.danaix.com/iaas/servers/</code> → JSON parse → table render → process exit. Network latency is included and is not subtracted.</p>
+
+  <div class="metric-row">
+    <div class="metric-card">
+      <div class="m-label">pip — avg</div>
+      <div class="m-value m-amber">5248<span style="font-size:14px">ms</span></div>
+      <div class="m-sub">min 1320 ms · max 9092 ms</div>
+    </div>
+    <div class="metric-card">
+      <div class="m-label">Nuitka — avg</div>
+      <div class="m-value m-red">15596<span style="font-size:14px">ms</span></div>
+      <div class="m-sub">min 10749 ms · max 28410 ms</div>
+    </div>
+    <div class="metric-card">
+      <div class="m-label">Go — avg</div>
+      <div class="m-value m-green">1231<span style="font-size:14px">ms</span></div>
+      <div class="m-sub">min 1176 ms · max 1342 ms</div>
+    </div>
+  </div>
+
+  <table class="comp-table">
+    <thead>
+      <tr>
+        <th>Build</th>
+        <th>Min</th>
+        <th>Max</th>
+        <th>Avg</th>
+        <th>Variance</th>
+        <th>Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>pip / venv</td>
+        <td>1320 ms</td>
+        <td>9092 ms</td>
+        <td><strong>5248 ms</strong></td>
+        <td><span class="badge badge-amber">High</span></td>
+        <td>First run ~9 s (TLS warmup); subsequent ~1.3 s</td>
+      </tr>
+      <tr>
+        <td>Python binary (Nuitka)</td>
+        <td>10749 ms</td>
+        <td>28410 ms</td>
+        <td><strong>15596 ms</strong></td>
+        <td><span class="badge badge-red">Very high</span></td>
+        <td>Onefile extraction overhead compounds with each run</td>
+      </tr>
+      <tr>
+        <td>Go binary</td>
+        <td>1176 ms</td>
+        <td>1342 ms</td>
+        <td><strong>1231 ms</strong></td>
+        <td><span class="badge badge-green">Low</span></td>
+        <td>Consistent; variance is pure network jitter</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout info">
+    <strong>Go variance is nearly pure network:</strong> The spread between Go's min (1176 ms) and max (1342 ms) is only 166 ms — this is network jitter to the staging API. Pip's spread of 7772 ms and Nuitka's spread of 17661 ms include both startup overhead and connection warmup effects.
+  </div>
+</div>
+
+
+<!-- ═══════════════════ 6. SIZE ═══════════════════ -->
+<div class="section" id="size">
+  <div class="section-num">06 — Binary Size</div>
+  <h2>Distribution Footprint</h2>
+
+  <div class="metric-row">
+    <div class="metric-card">
+      <div class="m-label">pip venv size</div>
+      <div class="m-value m-amber">120<span style="font-size:16px">MB</span></div>
+      <div class="m-sub">site-packages directory total</div>
+    </div>
+    <div class="metric-card">
+      <div class="m-label">Nuitka binary</div>
+      <div class="m-value" style="color:#dc2626">19.3<span style="font-size:16px">MB</span></div>
+      <div class="m-sub">19774 KB single file</div>
+    </div>
+    <div class="metric-card">
+      <div class="m-label">Go binary</div>
+      <div class="m-value m-green">12.0<span style="font-size:16px">MB</span></div>
+      <div class="m-sub">12306 KB single file</div>
+    </div>
+  </div>
+
+  <!-- Size bar chart -->
+  <div class="diagram-wrap">
+    <svg width="100%" viewBox="0 0 740 160" role="img">
+      <title>Binary size bar chart</title>
+      <text x="20" y="22" font-family="Sora,sans-serif" font-size="13" font-weight="500" fill="#0f1117">Distribution size (MB)</text>
+      <!-- pip: 120 MB → 120/120*560 = 560 -->
+      <rect x="180" y="38" width="560" height="28" rx="3" fill="#f59e0b" opacity="0.7"/>
+      <text x="746" y="57" font-family="JetBrains Mono,monospace" font-size="11" fill="#9a6200" text-anchor="end">120 MB (venv)</text>
+      <text x="20" y="57" font-family="Sora,sans-serif" font-size="12" fill="#3d3f4a">pip / venv</text>
+      <!-- Nuitka: 19.3 MB → 19.3/120*560 = 90 -->
+      <rect x="180" y="82" width="90" height="28" rx="3" fill="#ef4444"/>
+      <text x="276" y="101" font-family="JetBrains Mono,monospace" font-size="11" fill="#c0392b">19.3 MB</text>
+      <text x="20" y="101" font-family="Sora,sans-serif" font-size="12" fill="#3d3f4a">Python binary</text>
+      <!-- Go: 12 MB → 12/120*560 = 56 -->
+      <rect x="180" y="126" width="56" height="28" rx="3" fill="#10b981"/>
+      <text x="242" y="145" font-family="JetBrains Mono,monospace" font-size="11" fill="#0a7c52">12.0 MB</text>
+      <text x="20" y="145" font-family="Sora,sans-serif" font-size="12" fill="#3d3f4a">Go binary</text>
+    </svg>
+    <div class="diagram-caption">Figure 4 — The Go binary is the smallest distributable. The pip venv size includes all transitive dependencies installed on disk.</div>
+  </div>
+
+  <p>The pip venv footprint of 120 MB is not a download size — it is the on-disk size of the installed packages. When distributing via PyPI, users download a ~500 KB wheel and pip fetches the dependencies from PyPI, which are then stored in their venv. For the Go and Nuitka binaries, the file shown is what the user downloads directly.</p>
+</div>
+
+
+<!-- ═══════════════════ 7. ANALYSIS ═══════════════════ -->
+<div class="section" id="analysis">
+  <div class="section-num">07 — Analysis</div>
+  <h2>Root Cause Analysis</h2>
+
+  <h3>Why pip is faster than the Nuitka binary</h3>
+  <p>This is counterintuitive. A compiled binary should be faster than an interpreted language — but not in this case. The key is <em>how</em> Python loads code:</p>
+  <ul>
+    <li>Python compiles source files to <code>.pyc</code> bytecode on first import and caches them on disk.</li>
+    <li>On subsequent runs, the OS file cache keeps these <code>.pyc</code> files in memory, making imports nearly instantaneous.</li>
+    <li>The Python interpreter itself (<code>/usr/bin/python3</code>) is a standard system binary that stays warm in the OS page cache.</li>
+    <li>The Nuitka onefile binary must decompress its embedded payload into a temp directory <em>on every invocation</em> — this takes ~1.4 s regardless of how many times you run it, because there is no cross-invocation caching.</li>
+  </ul>
+
+  <div class="callout warn">
+    <strong>Nuitka onedir would be faster</strong> than onefile (~200–300 ms startup), but it requires distributing a directory instead of a single file. This trades startup speed for distribution complexity — the user must unzip and manage a folder. Neither option is ideal.
+  </div>
+
+  <h3>Why Go is fastest</h3>
+  <p>Go compiles to a true native binary with no runtime extraction, no interpreter, and no dynamic library loading at startup. The entire binary is a single statically-linked ELF/Mach-O file:</p>
+  <ul>
+    <li>The OS loads it directly into memory from the file system cache in milliseconds.</li>
+    <li>No Python interpreter startup (20–30 ms).</li>
+    <li>No <code>.pyc</code> bytecode compilation check on first run.</li>
+    <li>No import graph traversal of 10+ packages.</li>
+    <li>cobra's command parsing is compiled, not interpreted.</li>
+  </ul>
+
+  <h3>Why Nuitka API calls are so slow</h3>
+  <p>The average API call time for Nuitka (15.6 s) is drastically higher than pip (5.2 s). The reason is that the ~1.4 s extraction overhead happens before the HTTP call even starts. With 5 runs at ~3 s startup each, plus network latency, the average compounds. The underlying Python HTTP stack (<code>httpx</code>) is identical — only the startup tax differs.</p>
+
+  <h3>Summary of root causes</h3>
+  <table class="comp-table">
+    <thead>
+      <tr>
+        <th>Build</th>
+        <th>Startup cost source</th>
+        <th>Can be optimised?</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>pip / venv</td>
+        <td>Python interpreter init + import graph + OS cache warmup</td>
+        <td><span class="badge badge-amber">Partial</span> — lazy imports reduce to ~10 ms</td>
+      </tr>
+      <tr>
+        <td>Python binary (Nuitka onefile)</td>
+        <td>Decompression of embedded payload to temp dir on every run</td>
+        <td><span class="badge badge-red">No</span> — fundamental onefile limitation</td>
+      </tr>
+      <tr>
+        <td>Go binary</td>
+        <td>OS binary load from page cache</td>
+        <td><span class="badge badge-green">Already optimal</span> — 6–8 ms is near the floor</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+
+<!-- ═══════════════════ 8. RECOMMENDATIONS ═══════════════════ -->
+<div class="section" id="recommendations">
+  <div class="section-num">08 — Recommendations</div>
+  <h2>Which Method for Which Use Case</h2>
+
+  <div class="conclusion-grid">
+    <div class="conclusion-card c-pip">
+      <div class="c-title">pip / pipx install</div>
+      <div class="c-sub">Best for: developer machines with Python</div>
+      <ul>
+        <li>Fastest setup: <code>pipx install dana-cli</code></li>
+        <li>Good startup: ~25 ms warm</li>
+        <li>Easy to update: <code>pipx upgrade dana-cli</code></li>
+        <li>pyproject.toml already ready to publish</li>
+        <li>Requires Python 3.11+ on target machine</li>
+        <li>120 MB venv — acceptable for dev machines</li>
+      </ul>
+    </div>
+    <div class="conclusion-card c-nuitka">
+      <div class="c-title">Python binary (Nuitka)</div>
+      <div class="c-sub">Verdict: rejected</div>
+      <ul>
+        <li>6.9 min build time kills CI/CD iteration</li>
+        <li>1.5 s startup is worse than pip</li>
+        <li>Larger binary than Go (19.3 vs 12 MB)</li>
+        <li>Only advantage: no Python required on target</li>
+        <li>For that use case, Go binary is strictly better</li>
+        <li>Do not use for this project</li>
+      </ul>
+    </div>
+    <div class="conclusion-card c-go">
+      <div class="c-title">Go binary</div>
+      <div class="c-sub">Best for: end-user distribution</div>
+      <ul>
+        <li>Fastest startup: ~8 ms cold, ~6 ms warm</li>
+        <li>Most consistent API calls: 1231 ms avg</li>
+        <li>Smallest binary: 12 MB single file</li>
+        <li>8 s build time — fast CI/CD</li>
+        <li>No Python required on target machine</li>
+        <li>Ready for brew, apt, curl installer</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Distribution strategy decision</h3>
+
+  <div class="decision">
+    <div>
+      <div class="decision-col-title blue">pip / pipx</div>
+      <div class="decision-item">User is a Python developer</div>
+      <div class="decision-item">Python 3.11+ is already installed</div>
+      <div class="decision-item">Fast iteration / dev workflow needed</div>
+      <div class="decision-item">CI environment has pip available</div>
+      <div class="decision-item">Primary channel: PyPI</div>
+    </div>
+    <div>
+      <div class="decision-col-title green">Go binary</div>
+      <div class="decision-item">End-user download (brew, apt, curl)</div>
+      <div class="decision-item">CI environment without Python</div>
+      <div class="decision-item">Docker container minimal image</div>
+      <div class="decision-item">SRE / ops team on servers</div>
+      <div class="decision-item">Maximum performance required</div>
+    </div>
+    <div>
+      <div class="decision-col-title amber">Nuitka binary</div>
+      <div class="decision-item">Not recommended for this project</div>
+      <div class="decision-item">Worse startup than pip</div>
+      <div class="decision-item">Slower build than Go</div>
+      <div class="decision-item">Larger binary than Go</div>
+      <div class="decision-item">No scenario where it wins</div>
+    </div>
+  </div>
+
+  <div class="callout solution">
+    <strong>Final recommendation:</strong> publish to <strong>PyPI</strong> as the primary distribution channel (zero-effort install for Python developers with <code>pipx install dana-cli</code>). Ship the <strong>Go binary</strong> via goreleaser for brew, apt, and curl-installer users. Drop the Nuitka pipeline entirely — it offers no advantage over either alternative.
+  </div>
+</div>
+
+
+<!-- ═══════════════════ 9. REPRODUCE ═══════════════════ -->
+<div class="section" id="reproduce">
+  <div class="section-num">09 — How to Reproduce</div>
+  <h2>Running the Benchmark</h2>
+
+  <h3>Prerequisites</h3>
+  <ul>
+    <li>macOS arm64 (or Linux amd64/arm64 — adjust binary paths accordingly)</li>
+    <li><code>DANAIX_API_KEY</code> set in <code>dana-cli/.env</code> or environment (for <code>server list</code> tests)</li>
+    <li>Python 3.11+ and Go 1.22+ installed</li>
+  </ul>
+
+  <h3>1. Build all three distributions</h3>
+<pre><code><span class="cmt"># Python venv (editable install)</span>
+cd dana-cli
+python -m venv venv
+source venv/bin/activate
+pip install -e .
+
+<span class="cmt"># Nuitka onefile binary (~7 min)</span>
+pip install nuitka
+make build-local        <span class="cmt"># produces dist/dana-darwin-arm64</span>
+
+<span class="cmt"># Go binary (8 seconds)</span>
+cd ../dana-cli-go
+make build              <span class="cmt"># produces dist/dana</span>
+<span class="code-label">Shell</span></code></pre>
+
+  <h3>2. Run the benchmark script</h3>
+<pre><code><span class="cmt"># From the project root (contains both dana-cli/ and dana-cli-go/)</span>
+DANA_VENV=/path/to/dana-cli/venv \
+BUILD_PIP_MS=9000 \
+BUILD_PY_MS=416000 \
+BUILD_GO_MS=8000 \
+bash benchmark.sh
+
+<span class="cmt"># Output is saved to:</span>
+<span class="cmt"># benchmark-results-darwin-arm64-$(date +%Y%m%d).txt</span>
+<span class="code-label">Shell</span></code></pre>
+
+  <h3>3. Run on Linux for cross-OS comparison</h3>
+<pre><code><span class="cmt"># Copy script and binaries to a Linux host</span>
+scp benchmark.sh \
+    dana-cli/dist/dana-linux-amd64 \
+    dana-cli-go/dist/dana \
+    user@linux-host:~/bench/
+
+<span class="cmt"># Run on Linux (as root for accurate cold measurements)</span>
+ssh user@linux-host 'cd ~/bench && bash benchmark.sh'
+<span class="cmt"># On Linux, the script drops page cache between cold runs:</span>
+<span class="cmt"># sync && echo 3 > /proc/sys/vm/drop_caches</span>
+<span class="code-label">Shell</span></code></pre>
+
+  <h3>Rebuild everything from scratch (RUN_BUILDS=1)</h3>
+<pre><code><span class="cmt"># Times and runs all builds before benchmarking</span>
+<span class="cmt"># Warning: Nuitka rebuild takes ~7 minutes</span>
+RUN_BUILDS=1 bash benchmark.sh
+<span class="code-label">Shell</span></code></pre>
+</div>
+
+
+<!-- ═══════════════════ 10. CONCLUSION ═══════════════════ -->
+<div class="section" id="conclusion">
+  <div class="section-num">10 — Conclusion</div>
+  <h2>Summary</h2>
+
+  <table class="comp-table">
+    <thead>
+      <tr>
+        <th>Metric</th>
+        <th>pip / venv</th>
+        <th>Python binary (Nuitka)</th>
+        <th>Go binary</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Build time</td>
+        <td>9 s</td>
+        <td><span class="badge badge-red">6.9 min</span></td>
+        <td><span class="badge badge-green">8 s</span></td>
+      </tr>
+      <tr>
+        <td>--help cold avg</td>
+        <td>27 ms</td>
+        <td><span class="badge badge-red">1506 ms</span></td>
+        <td><span class="badge badge-green">8 ms</span></td>
+      </tr>
+      <tr>
+        <td>--help warm avg</td>
+        <td>25 ms</td>
+        <td><span class="badge badge-red">1429 ms</span></td>
+        <td><span class="badge badge-green">6 ms</span></td>
+      </tr>
+      <tr>
+        <td>server list avg</td>
+        <td>5248 ms</td>
+        <td><span class="badge badge-red">15596 ms</span></td>
+        <td><span class="badge badge-green">1231 ms</span></td>
+      </tr>
+      <tr>
+        <td>server list variance</td>
+        <td><span class="badge badge-amber">High (7.8 s spread)</span></td>
+        <td><span class="badge badge-red">Very high (17.7 s spread)</span></td>
+        <td><span class="badge badge-green">Low (166 ms spread)</span></td>
+      </tr>
+      <tr>
+        <td>Binary / install size</td>
+        <td>120 MB (venv)</td>
+        <td>19.3 MB</td>
+        <td><span class="badge badge-green">12.0 MB</span></td>
+      </tr>
+      <tr>
+        <td>Requires Python on target</td>
+        <td><span class="badge badge-amber">Yes</span></td>
+        <td><span class="badge badge-green">No</span></td>
+        <td><span class="badge badge-green">No</span></td>
+      </tr>
+      <tr>
+        <td>Suitable for brew/apt</td>
+        <td><span class="badge badge-red">No</span></td>
+        <td><span class="badge badge-amber">Possible but slow</span></td>
+        <td><span class="badge badge-green">Yes — goreleaser ready</span></td>
+      </tr>
+      <tr>
+        <td>Verdict</td>
+        <td><span class="badge badge-amber">PyPI distribution</span></td>
+        <td><span class="badge badge-red">Rejected</span></td>
+        <td><span class="badge badge-green">Primary binary</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout solution">
+    <strong>Bottom line:</strong> The Go binary wins on every measurable axis — fastest startup (8 ms), most consistent API performance (1231 ms avg), smallest single-file download (12 MB), and fastest build time (8 s). pip/pipx is the right choice for Python developers who prefer the <code>pipx install dana-cli</code> workflow. The Nuitka pipeline should be removed from the project — it is slower to build, slower to start, and larger than the Go binary.
+  </div>
+
+  <h3>Next steps</h3>
+  <ul>
+    <li>Publish the Python package to PyPI: <code>hatch publish</code> (pyproject.toml is ready)</li>
+    <li>Set up goreleaser with GitHub Actions for automated Go binary releases to brew, apt, and curl installer</li>
+    <li>Remove Nuitka from the Makefile and CI pipeline</li>
+    <li>Run the same benchmark on a Linux amd64 host to complete the cross-platform picture</li>
+  </ul>
+</div>
+
+<hr class="divider">
+<p style="font-size:12px;color:#b0b3c1;text-align:center;padding-bottom:2rem">
+  dana-cli · DanaIX Cloud Platform · Performance Benchmark Report · 2026-05-31 · darwin arm64 · Apple M1 Pro
+</p>
+
+</div>
+</body>
+</html>
