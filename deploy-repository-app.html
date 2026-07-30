@@ -1,0 +1,1884 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PaaS Repository Deployment From GitHub — Design Document</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #0a0d12;
+        --surface: #111720;
+        --surface-2: #161d27;
+        --border: #232b37;
+        --border-soft: #1a212b;
+        --text: #e7ecf1;
+        --text-dim: #8c99a6;
+        --text-faint: #5b6572;
+        --teal: #4fd8c4;
+        --teal-dim: #2a5850;
+        --amber: #f2b84b;
+        --violet: #a78bfa;
+        --rose: #f87171;
+        --mono: "JetBrains Mono", monospace;
+        --sans: "Inter", sans-serif;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        scroll-behavior: smooth;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: var(--sans);
+        line-height: 1.85;
+        font-size: 16px;
+      }
+      ::selection {
+        background: var(--teal-dim);
+        color: #fff;
+      }
+
+      /* ---------- background texture ---------- */
+      body::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        background-image:
+          radial-gradient(
+            circle at 15% 8%,
+            rgba(79, 216, 196, 0.06),
+            transparent 40%
+          ),
+          radial-gradient(
+            circle at 85% 92%,
+            rgba(167, 139, 250, 0.05),
+            transparent 40%
+          );
+        pointer-events: none;
+        z-index: 0;
+      }
+
+      a {
+        color: inherit;
+      }
+
+      /* ---------- top rail (nav) ---------- */
+      .rail {
+        position: fixed;
+        top: 0;
+        bottom: 0;
+        left: 0;
+        width: 230px;
+        border-right: 1px solid var(--border-soft);
+        background: rgba(10, 13, 18, 0.7);
+        backdrop-filter: blur(10px);
+        padding: 32px 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        z-index: 50;
+        overflow-y: auto;
+      }
+      .rail .brand {
+        font-family: var(--mono);
+        font-size: 11px;
+        letter-spacing: 0.12em;
+        color: var(--text-faint);
+        text-transform: uppercase;
+        margin-bottom: 22px;
+        padding-bottom: 18px;
+        border-bottom: 1px solid var(--border-soft);
+      }
+      .rail .brand strong {
+        display: block;
+        font-family: var(--sans);
+        font-size: 15px;
+        font-weight: 700;
+        letter-spacing: 0;
+        color: var(--text);
+        text-transform: none;
+        margin-bottom: 6px;
+      }
+      .rail a {
+        text-decoration: none;
+        font-size: 13.5px;
+        color: var(--text-dim);
+        padding: 8px 10px;
+        border-radius: 6px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        transition:
+          background 0.15s,
+          color 0.15s;
+      }
+      .rail a .num {
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--text-faint);
+        width: 18px;
+      }
+      .rail a:hover {
+        background: var(--surface-2);
+        color: var(--text);
+      }
+      .rail a.active {
+        background: var(--surface-2);
+        color: var(--teal);
+      }
+      .rail a.active .num {
+        color: var(--teal);
+      }
+
+      @media (max-width: 980px) {
+        .rail {
+          display: none;
+        }
+        .main {
+          margin-left: 0 !important;
+        }
+      }
+
+      .main {
+        margin-left: 230px;
+        position: relative;
+        z-index: 1;
+      }
+
+      .wrap {
+        max-width: 860px;
+        margin: 0 auto;
+        padding: 0 40px;
+      }
+
+      /* ---------- hero ---------- */
+      .hero {
+        padding: 100px 0 70px;
+        border-bottom: 1px solid var(--border-soft);
+      }
+      .badges {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-bottom: 28px;
+      }
+      .badge {
+        font-family: var(--mono);
+        font-size: 11.5px;
+        padding: 5px 12px;
+        border-radius: 20px;
+        border: 1px solid var(--border);
+        color: var(--text-dim);
+        letter-spacing: 0.02em;
+      }
+      .badge.live {
+        color: var(--teal);
+        border-color: var(--teal-dim);
+        background: rgba(79, 216, 196, 0.06);
+      }
+      .badge.live::before {
+        content: "● ";
+      }
+      h1.title {
+        font-size: 46px;
+        font-weight: 800;
+        line-height: 1.28;
+        margin: 0 0 18px;
+        letter-spacing: -0.01em;
+      }
+      .hero .lead {
+        font-size: 17px;
+        color: var(--text-dim);
+        max-width: 640px;
+        margin: 0;
+      }
+      .hero .lead code {
+        color: var(--amber);
+      }
+
+      /* ---------- pipeline diagram (signature element) ---------- */
+      .pipeline {
+        margin-top: 56px;
+        padding: 34px 28px 26px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        overflow-x: auto;
+      }
+      .pipeline-row {
+        display: flex;
+        align-items: center;
+        min-width: 640px;
+      }
+      .node {
+        flex: 0 0 auto;
+        text-align: center;
+        width: 130px;
+      }
+      .node .dot {
+        width: 52px;
+        height: 52px;
+        margin: 0 auto 10px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: var(--mono);
+        font-size: 11px;
+        font-weight: 600;
+        border: 1.5px solid var(--border);
+        background: var(--surface-2);
+        color: var(--text-dim);
+      }
+      .node.on .dot {
+        border-color: var(--teal-dim);
+        color: var(--teal);
+        box-shadow: 0 0 0 3px rgba(79, 216, 196, 0.08);
+      }
+      .node .label {
+        font-size: 12.5px;
+        color: var(--text-dim);
+        font-weight: 600;
+      }
+      .node .sub {
+        font-family: var(--mono);
+        font-size: 10.5px;
+        color: var(--text-faint);
+        margin-top: 2px;
+      }
+      .link {
+        flex: 1 1 auto;
+        height: 1px;
+        position: relative;
+        background: var(--border);
+        margin: 0 -6px;
+        top: -19px;
+      }
+      .link::after {
+        content: "";
+        position: absolute;
+        top: -2.5px;
+        left: 0;
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--teal);
+        animation: travel 3.4s linear infinite;
+        box-shadow: 0 0 8px 1px rgba(79, 216, 196, 0.7);
+      }
+      .link:nth-child(2)::after {
+        animation-delay: 0s;
+      }
+      .link:nth-child(4)::after {
+        animation-delay: 0.85s;
+      }
+      .link:nth-child(6)::after {
+        animation-delay: 1.7s;
+      }
+      @keyframes travel {
+        from {
+          left: 0;
+        }
+        to {
+          left: 100%;
+        }
+      }
+      .pipeline-caption {
+        margin-top: 22px;
+        padding-top: 16px;
+        border-top: 1px solid var(--border-soft);
+        font-family: var(--mono);
+        font-size: 11.5px;
+        color: var(--text-faint);
+        display: flex;
+        gap: 22px;
+        flex-wrap: wrap;
+      }
+      .pipeline-caption span::before {
+        content: "— ";
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .link::after {
+          animation: none;
+          left: 50%;
+        }
+      }
+
+      /* ---------- sections ---------- */
+      section {
+        padding: 64px 0;
+        border-bottom: 1px solid var(--border-soft);
+      }
+      section:last-of-type {
+        border-bottom: none;
+      }
+      .eyebrow {
+        font-family: var(--mono);
+        font-size: 12px;
+        color: var(--teal);
+        letter-spacing: 0.08em;
+        margin-bottom: 10px;
+      }
+      h2 {
+        font-size: 28px;
+        font-weight: 800;
+        margin: 0 0 8px;
+        letter-spacing: -0.01em;
+      }
+      .section-intro {
+        color: var(--text-dim);
+        font-size: 15px;
+        margin: 0 0 32px;
+        max-width: 640px;
+      }
+      h3 {
+        font-size: 18px;
+        font-weight: 700;
+        margin: 40px 0 14px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      h3:first-of-type {
+        margin-top: 0;
+      }
+      h3 .tag {
+        font-family: var(--mono);
+        font-size: 10.5px;
+        font-weight: 600;
+        padding: 2px 8px;
+        border-radius: 5px;
+        letter-spacing: 0.03em;
+      }
+      h3 .tag.get {
+        background: rgba(79, 216, 196, 0.12);
+        color: var(--teal);
+      }
+      h3 .tag.post {
+        background: rgba(167, 139, 250, 0.14);
+        color: var(--violet);
+      }
+      h3 .tag.put {
+        background: rgba(242, 184, 75, 0.14);
+        color: var(--amber);
+      }
+      h3 .tag.delete {
+        background: rgba(248, 113, 113, 0.14);
+        color: var(--rose);
+      }
+      h3 code.path {
+        font-family: var(--mono);
+        font-size: 14px;
+        font-weight: 400;
+        color: var(--text);
+      }
+
+      p {
+        color: var(--text-dim);
+        margin: 0 0 16px;
+      }
+      strong {
+        color: var(--text);
+        font-weight: 700;
+      }
+
+      /* callouts */
+      .callout {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-left: 3px solid var(--teal-dim);
+        border-radius: 8px;
+        padding: 16px 20px;
+        margin: 20px 0;
+        font-size: 14.5px;
+        color: var(--text-dim);
+      }
+      .callout strong {
+        color: var(--teal);
+        font-family: var(--mono);
+        font-size: 12px;
+        letter-spacing: 0.03em;
+        display: block;
+        margin-bottom: 6px;
+      }
+      .callout.violet {
+        border-left-color: var(--violet);
+      }
+      .callout.violet strong {
+        color: var(--violet);
+      }
+      .callout.amber {
+        border-left-color: var(--amber);
+      }
+      .callout.amber strong {
+        color: var(--amber);
+      }
+
+      /* tables */
+      .tbl-wrap {
+        overflow-x: auto;
+        margin: 20px 0;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13.5px;
+        min-width: 480px;
+      }
+      th {
+        text-align: left;
+        background: var(--surface-2);
+        color: var(--text-dim);
+        font-family: var(--mono);
+        font-weight: 500;
+        font-size: 11.5px;
+        letter-spacing: 0.03em;
+        padding: 11px 16px;
+        border-bottom: 1px solid var(--border);
+      }
+      td {
+        padding: 11px 16px;
+        border-bottom: 1px solid var(--border-soft);
+        color: var(--text-dim);
+        vertical-align: top;
+      }
+      tr:last-child td {
+        border-bottom: none;
+      }
+      td code,
+      td .fld {
+        font-family: var(--mono);
+        color: var(--text);
+        font-size: 12.5px;
+      }
+      td strong {
+        color: var(--text);
+      }
+
+      /* schema block (db table look) */
+      .schema {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 0;
+        margin: 20px 0;
+        overflow: hidden;
+      }
+      .schema .schema-head {
+        font-family: var(--mono);
+        font-size: 12.5px;
+        color: var(--text);
+        background: var(--surface-2);
+        padding: 10px 18px;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        justify-content: space-between;
+      }
+      .schema .schema-head span {
+        color: var(--text-faint);
+      }
+      .schema-row {
+        display: flex;
+        padding: 9px 18px;
+        border-bottom: 1px solid var(--border-soft);
+        font-family: var(--mono);
+        font-size: 12.5px;
+        gap: 14px;
+      }
+      .schema-row:last-child {
+        border-bottom: none;
+      }
+      .schema-row .col-name {
+        color: var(--teal);
+        min-width: 150px;
+      }
+      .schema-row .col-type {
+        color: var(--violet);
+        min-width: 150px;
+      }
+      .schema-row .col-note {
+        color: var(--text-faint);
+        font-family: var(--sans);
+        flex: 1;
+      }
+
+      /* code blocks */
+      pre {
+        background: #0d1218;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 18px 20px;
+        overflow-x: auto;
+        font-family: var(--mono);
+        font-size: 12.8px;
+        line-height: 1.7;
+        margin: 16px 0;
+        direction: ltr;
+        text-align: left;
+        position: relative;
+      }
+      pre .k {
+        color: var(--teal);
+      }
+      pre .s {
+        color: var(--amber);
+      }
+      pre .n {
+        color: var(--violet);
+      }
+      pre .b {
+        color: #7dd3fc;
+      }
+      code.inline {
+        font-family: var(--mono);
+        background: var(--surface-2);
+        border: 1px solid var(--border);
+        border-radius: 5px;
+        padding: 1px 7px;
+        font-size: 0.88em;
+        color: var(--teal);
+        direction: ltr;
+        display: inline-block;
+      }
+      .code-label {
+        font-family: var(--mono);
+        font-size: 10.5px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--text-faint);
+        margin: 18px 0 -4px;
+      }
+
+      ul.plain {
+        margin: 0 0 16px;
+        padding-inline-start: 20px;
+        color: var(--text-dim);
+      }
+      ul.plain li {
+        margin-bottom: 8px;
+      }
+      ul.plain li strong {
+        color: var(--text);
+      }
+
+      ol.steps {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        counter-reset: step;
+      }
+      ol.steps > li {
+        counter-increment: step;
+        position: relative;
+        padding-left: 44px;
+        padding-bottom: 22px;
+        margin-bottom: 2px;
+        border-left: 1px solid var(--border);
+        margin-left: 15px;
+      }
+      ol.steps > li:last-child {
+        border-color: transparent;
+        padding-bottom: 0;
+      }
+      ol.steps > li::before {
+        content: counter(step);
+        position: absolute;
+        left: -15.5px;
+        top: 0;
+        width: 31px;
+        height: 31px;
+        border-radius: 50%;
+        background: var(--surface-2);
+        border: 1px solid var(--border);
+        color: var(--teal);
+        font-family: var(--mono);
+        font-size: 12.5px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      ol.steps > li > .step-title {
+        font-weight: 700;
+        color: var(--text);
+        margin-bottom: 5px;
+        font-size: 14.5px;
+      }
+      ol.steps > li > p {
+        margin: 0;
+      }
+
+      .grid-2 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+      }
+      @media (max-width: 700px) {
+        .grid-2 {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      footer {
+        padding: 50px 0 90px;
+        color: var(--text-faint);
+        font-family: var(--mono);
+        font-size: 12px;
+        text-align: center;
+      }
+
+      /* fade-in on scroll */
+      .fade-in {
+        opacity: 0;
+        transform: translateY(14px);
+        transition:
+          opacity 0.6s ease,
+          transform 0.6s ease;
+      }
+      .fade-in.shown {
+        opacity: 1;
+        transform: none;
+      }
+    </style>
+  </head>
+  <body>
+    <nav class="rail">
+      <div class="brand">
+        <strong>PaaS Repository Deployment From GitHub</strong>
+        doc / paas-backend
+      </div>
+      <a href="#s1"><span class="num">01</span> Architecture & Actors</a>
+      <a href="#s2"><span class="num">02</span> Database Tables</a>
+      <a href="#s3"><span class="num">03</span> API Routes</a>
+      <a href="#s4"><span class="num">04</span> Full Flow</a>
+      <a href="#s5"><span class="num">05</span> Validations</a>
+      <a href="#s6"><span class="num">06</span> auto_deploy_on_push</a>
+    </nav>
+
+    <div class="main">
+      <div class="wrap">
+        <div class="hero">
+          <div class="badges">
+            <span class="badge live">Implementation-ready</span>
+            <span class="badge">PaaS service</span>
+            <span class="badge">OpenShift</span>
+          </div>
+          <h1 class="title">
+            PaaS Repository Deployment From GitHub<br /><span
+              style="color: var(--text-dim)"
+              >— from account connection to live execution on OpenShift</span
+            >
+          </h1>
+          <p class="lead">
+            This document describes the full
+            <code>/applications/repository</code> pipeline: three independent
+            actors — Browser, the <code>auth</code> service, and PaaS — each
+            with its own clearly defined territory, ultimately resulting in the
+            actual creation of Deployment/Service/Route/BuildConfig on
+            OpenShift.
+          </p>
+
+          <div class="pipeline">
+            <div class="pipeline-row">
+              <div class="node on">
+                <div class="dot">USER</div>
+                <div class="label">Browser</div>
+                <div class="sub">cloud.danaix.com</div>
+              </div>
+              <div class="link"></div>
+              <div class="node on">
+                <div class="dot">AUTH</div>
+                <div class="label">auth</div>
+                <div class="sub">GitHub OAuth</div>
+              </div>
+              <div class="link"></div>
+              <div class="node on">
+                <div class="dot">PaaS</div>
+                <div class="label">PaaS</div>
+                <div class="sub">application/repository</div>
+              </div>
+              <div class="link"></div>
+              <div class="node">
+                <div class="dot">OCP</div>
+                <div class="label">OpenShift</div>
+                <div class="sub">Build → Deploy</div>
+              </div>
+            </div>
+            <div class="pipeline-caption">
+              <span>Connect & browse: directly between Browser and auth</span>
+              <span
+                >submit: PaaS → auth with
+                <code class="inline" style="padding: 0 4px"
+                  >x-service-key</code
+                ></span
+              >
+              <span>push: GitHub → PaaS with HMAC signature</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- ================= SECTION 1 ================= -->
+        <section id="s1">
+          <div class="eyebrow fade-in">01 / Architecture</div>
+          <h2 class="fade-in">Overall Architecture & Actors</h2>
+          <p class="section-intro fade-in">
+            There are three actors, each with its own independent API. The
+            boundary of responsibility between them is exactly what this entire
+            document is built around.
+          </p>
+
+          <div class="tbl-wrap fade-in">
+            <table>
+              <tr>
+                <th style="width: 120px">Actor</th>
+                <th>Role</th>
+              </tr>
+              <tr>
+                <td><strong>User's Browser</strong></td>
+                <td>
+                  Sends requests directly to both <code>auth</code> (GitHub
+                  connection and account/repo/branch browsing) and
+                  <code>PaaS</code> (creating and managing the application).
+                </td>
+              </tr>
+              <tr>
+                <td><strong>PaaS</strong></td>
+                <td>
+                  Only connects to <code>auth</code> when it needs to verify
+                  repo/branch ownership, obtain a clone-token, or manage a
+                  webhook — via <code>/internal/...</code> with the
+                  <code>x-service-key</code> header.
+                </td>
+              </tr>
+              <tr>
+                <td><strong>auth</strong></td>
+                <td>
+                  Has both a user-facing endpoint (session-based, for Connect
+                  and Browse) and an internal endpoint. It's responsible for
+                  GitHub OAuth, token storage, and proxying the GitHub API — not
+                  PaaS.
+                </td>
+              </tr>
+            </table>
+          </div>
+
+          <p class="fade-in">
+            Dashboard domain:
+            <code class="inline">https://cloud.danaix.com/</code>
+          </p>
+
+          <div class="callout fade-in">
+            <strong>Architecture Decision 01</strong>
+            GitHub connection and account/repo/branch browsing happen entirely
+            directly between the Browser and <code>auth</code>. PaaS plays no
+            role in the connect phase or the browse phase, and is unaware of the
+            user's selection until the moment of submit.
+          </div>
+          <div class="callout violet fade-in">
+            <strong>Architecture Decision 02</strong>
+            <code>user_id</code> in PaaS and <code>user_id</code> in auth are
+            the same. No mapping table is needed; PaaS passes its own
+            <code>user_id</code> directly in calls to
+            <code>/internal/git/{user_id}/...</code>.
+          </div>
+        </section>
+
+        <!-- ================= SECTION 2 ================= -->
+        <section id="s2">
+          <div class="eyebrow fade-in">02 / Data</div>
+          <h2 class="fade-in">Database Tables</h2>
+          <p class="section-intro fade-in">
+            One new table in PaaS (<code>repositories</code>), three existing
+            tables populated in the same create transaction, one Redis key for
+            idempotency, and a set of OpenShift labels that underpin live
+            queries.
+          </p>
+
+          <h3>
+            <span class="tag get">REF</span>
+            <code class="path">auth.git_connections</code>
+          </h3>
+          <p>
+            Outside PaaS's ownership — reference only; stores each user's
+            connection to GitHub.
+          </p>
+          <div class="schema fade-in">
+            <div class="schema-head">git_connections <span>auth</span></div>
+            <div class="schema-row">
+              <span class="col-name">id</span
+              ><span class="col-type">UUID (PK)</span
+              ><span class="col-note"></span>
+            </div>
+            <div class="schema-row">
+              <span class="col-name">user_id</span
+              ><span class="col-type">Integer</span
+              ><span class="col-note">NOT NULL</span>
+            </div>
+            <div class="schema-row">
+              <span class="col-name">provider</span
+              ><span class="col-type">Enum(GITHUB)</span
+              ><span class="col-note">NOT NULL</span>
+            </div>
+            <div class="schema-row">
+              <span class="col-name">external_account_id</span
+              ><span class="col-type">String</span
+              ><span class="col-note">NOT NULL</span>
+            </div>
+            <div class="schema-row">
+              <span class="col-name">external_username</span
+              ><span class="col-type">String</span
+              ><span class="col-note">NOT NULL</span>
+            </div>
+            <div class="schema-row">
+              <span class="col-name">access_token_encrypted</span
+              ><span class="col-type">String</span
+              ><span class="col-note">NOT NULL</span>
+            </div>
+            <div class="schema-row">
+              <span class="col-name">refresh_token_encrypted</span
+              ><span class="col-type">String</span
+              ><span class="col-note">NULLABLE</span>
+            </div>
+            <div class="schema-row">
+              <span class="col-name">token_expires_at</span
+              ><span class="col-type">DateTime</span
+              ><span class="col-note">NULLABLE</span>
+            </div>
+            <div class="schema-row">
+              <span class="col-name">scopes</span
+              ><span class="col-type">JSON</span
+              ><span class="col-note">NOT NULL</span>
+            </div>
+            <div class="schema-row">
+              <span class="col-name">connected_at</span
+              ><span class="col-type">DateTime</span
+              ><span class="col-note">NOT NULL</span>
+            </div>
+            <div class="schema-row">
+              <span class="col-name">revoked_at</span
+              ><span class="col-type">DateTime</span
+              ><span class="col-note">NULLABLE</span>
+            </div>
+            <div class="schema-row">
+              <span class="col-name">last_used_at</span
+              ><span class="col-type">DateTime</span
+              ><span class="col-note">NOT NULL</span>
+            </div>
+          </div>
+
+          <h3>
+            <span class="tag post">NEW</span>
+            <code class="path">repositories</code>
+          </h3>
+          <p>
+            New table in PaaS. Represents an "application ↔ GitHub repo"
+            connection, with a snapshot of the info needed for the build.
+          </p>
+          <div class="schema fade-in">
+            <div class="schema-head">repositories <span>PaaS · new</span></div>
+            <div class="schema-row">
+              <span class="col-name">id</span
+              ><span class="col-type">UUID (PK)</span
+              ><span class="col-note"
+                >generated in PaaS before the resolve call</span
+              >
+            </div>
+            <div class="schema-row">
+              <span class="col-name">auth_account_id</span
+              ><span class="col-type">UUID</span
+              ><span class="col-note">equal to git_connections.id in auth</span>
+            </div>
+            <div class="schema-row">
+              <span class="col-name">user_id</span
+              ><span class="col-type">Integer</span
+              ><span class="col-note">same user_id passed to auth</span>
+            </div>
+            <div class="schema-row">
+              <span class="col-name">external_id</span
+              ><span class="col-type">String</span
+              ><span class="col-note">the repo's id on GitHub</span>
+            </div>
+            <div class="schema-row">
+              <span class="col-name">name</span
+              ><span class="col-type">String</span
+              ><span class="col-note">e.g. org/repo</span>
+            </div>
+            <div class="schema-row">
+              <span class="col-name">clone_url</span
+              ><span class="col-type">String</span
+              ><span class="col-note">snapshot taken at create time</span>
+            </div>
+            <div class="schema-row">
+              <span class="col-name">branch</span
+              ><span class="col-type">String</span
+              ><span class="col-note"></span>
+            </div>
+            <div class="schema-row">
+              <span class="col-name">dockerfile_path</span
+              ><span class="col-type">String</span
+              ><span class="col-note"></span>
+            </div>
+            <div class="schema-row">
+              <span class="col-name">build_context_path</span
+              ><span class="col-type">String</span
+              ><span class="col-note"></span>
+            </div>
+            <div class="schema-row">
+              <span class="col-name">webhook_id</span
+              ><span class="col-type">String, nullable</span
+              ><span class="col-note"
+                >non-null means a webhook is currently active</span
+              >
+            </div>
+            <div class="schema-row">
+              <span class="col-name">webhook_secret</span
+              ><span class="col-type">String (encrypted)</span
+              ><span class="col-note">for verifying the HMAC signature</span>
+            </div>
+            <div class="schema-row">
+              <span class="col-name">created_at / updated_at</span
+              ><span class="col-type">DateTime (tz)</span
+              ><span class="col-note"></span>
+            </div>
+            <div class="schema-row">
+              <span class="col-name">deleted_at</span
+              ><span class="col-type">DateTime (tz)</span
+              ><span class="col-note"
+                >soft-delete pattern shared with Application</span
+              >
+            </div>
+          </div>
+          <p>
+            The link to <code>applications</code> is established via the
+            existing <code>source_type</code>/<code>source_id</code> pattern:
+            when <code>source_type = REPOSITORY</code>,
+            <code>applications.source_id</code> equals
+            <code>repositories.id</code>.
+          </p>
+          <p style="color: var(--text-faint); font-size: 13px">
+            Suggested index: <code class="inline">external_id</code>,
+            <code class="inline">webhook_id</code>
+          </p>
+
+          <h3>
+            <code class="path">applications</code> ·
+            <code class="path">application_deployments</code>
+          </h3>
+          <div class="grid-2 fade-in">
+            <div class="schema">
+              <div class="schema-head">applications <span>existing</span></div>
+              <div class="schema-row">
+                <span class="col-name">source_type</span
+                ><span class="col-type">Enum</span
+                ><span class="col-note">REPOSITORY</span>
+              </div>
+              <div class="schema-row">
+                <span class="col-name">source_id</span
+                ><span class="col-type">UUID</span
+                ><span class="col-note">→ repositories.id</span>
+              </div>
+              <div class="schema-row">
+                <span class="col-name">status</span
+                ><span class="col-type">Enum</span
+                ><span class="col-note">default CREATING</span>
+              </div>
+            </div>
+            <div class="schema">
+              <div class="schema-head">
+                application_deployments <span>existing</span>
+              </div>
+              <div class="schema-row">
+                <span class="col-name">source_id</span
+                ><span class="col-type">UUID</span
+                ><span class="col-note"
+                  >→ repositories.id (not the build id)</span
+                >
+              </div>
+              <div class="schema-row">
+                <span class="col-name">kind</span
+                ><span class="col-type">Enum</span
+                ><span class="col-note"
+                  >always DEPLOYMENT in this pipeline</span
+                >
+              </div>
+              <div class="schema-row">
+                <span class="col-name">status</span
+                ><span class="col-type">Enum</span
+                ><span class="col-note">default PENDING</span>
+              </div>
+            </div>
+          </div>
+          <p>
+            Fields like <code class="inline">command</code>,
+            <code class="inline">args</code>,
+            <code class="inline">readiness_probe</code>, and the scaling details
+            (<code class="inline">scaling_mode</code>,
+            <code class="inline">min_replicas</code>,
+            <code class="inline">max_replicas</code>,
+            <code class="inline">max_cpu_percent</code>,
+            <code class="inline">max_memory_percent</code>) are applied directly
+            to the OpenShift objects (Deployment/HPA) — full details in sections
+            3 and 4.
+          </p>
+
+          <!-- <h3><code class="path">application_plans</code></h3>
+          <div class="tbl-wrap fade-in">
+            <table>
+              <tr>
+                <th>Field in request body</th>
+                <th>Column in application_plans</th>
+                <th>Allowed values</th>
+              </tr>
+              <tr>
+                <td><code>billing_type</code></td>
+                <td><code>plan_type</code></td>
+                <td>PAYG, FLAVOR</td>
+              </tr>
+              <tr>
+                <td><code>application_plan.type</code></td>
+                <td><code>price_type</code></td>
+                <td>CUSTOM, PACKAGE</td>
+              </tr>
+              <tr>
+                <td><code>application_plan.cpu</code></td>
+                <td><code>cpu</code></td>
+                <td>—</td>
+              </tr>
+              <tr>
+                <td><code>application_plan.memory</code></td>
+                <td><code>memory</code></td>
+                <td>—</td>
+              </tr>
+              <tr>
+                <td><code>application_plan.storage</code></td>
+                <td><code>storage</code></td>
+                <td>—</td>
+              </tr>
+              <tr>
+                <td><code>scaling.replicas</code> (MANUAL only)</td>
+                <td><code>replicas</code></td>
+                <td>—</td>
+              </tr>
+            </table>
+          </div>
+
+          <h3>Redis · idempotency</h3>
+          <pre><span class="k">key</span>:   webhook_delivery:{delivery_id}
+<span class="k">value</span>: "1"
+<span class="k">TTL</span>:   86400  <span class="s">(24h)</span>
+<span class="k">command</span>: SET key value NX EX 86400</pre> -->
+
+          <h3>OpenShift labels</h3>
+          <p>
+            Applied to every object created (Service, Route, BuildConfig,
+            ImageStream, Deployment, PVC, Secret, ConfigMap, HPA) — the basis
+            for live queries (GET) and cleanup (DELETE):
+          </p>
+          <pre>
+danaix.com/application-id  = &lt;applications.id&gt;
+danaix.com/deployment-id   = &lt;application_deployments.id&gt;
+danaix.com/owner           = &lt;user_id&gt;
+danaix.com/deploy-by       = "repository"</pre
+          >
+        </section>
+
+        <!-- ================= SECTION 3 ================= -->
+        <section id="s3">
+          <div class="eyebrow fade-in">03 / API</div>
+          <h2 class="fade-in">API Routes — with full schema</h2>
+          <p class="section-intro fade-in">
+            In order: user-facing on auth, internal on auth (PaaS only), and
+            user-facing on PaaS.
+          </p>
+
+          <div class="code-label">
+            auth · user-facing (directly from Browser)
+          </div>
+
+          <h3>
+            <span class="tag get">GET</span>
+            <code class="path">/user/git/github/connect</code>
+          </h3>
+          <p>
+            <strong>Auth:</strong> the user's session in auth.
+            <strong>Query:</strong> <code>return_to</code> (required) →
+            <code class="inline">https://cloud.danaix.com/git/callback</code>
+          </p>
+          <p>
+            <strong>Response:</strong> <code>302</code> → GitHub's OAuth
+            authorize URL (second-app client_id, scope=repo).
+            <strong>Error:</strong> <code>401</code> if not logged in.
+          </p>
+
+          <h3>
+            <span class="tag get">GET</span>
+            <code class="path">/user/git/github/callback</code>
+          </h3>
+          <p>
+            Parameters: <code>code</code>, <code>state</code>. The code is
+            exchanged with GitHub, <code>{id, login}</code> is fetched, and the
+            <code>git_connections</code> record is created/updated.
+          </p>
+          <pre><span class="s">Success</span>: 302 → https://cloud.danaix.com/git/callback?status=success&account_id={uuid}
+<span class="s">Failure</span>: 302 → https://cloud.danaix.com/git/callback?status=error&reason={reason}
+<span class="n">reason</span>:  oauth_denied | token_exchange_failed | github_api_error</pre>
+          <div class="callout amber">
+            The GitHub token is never placed in the URL or passed to the
+            Browser.
+          </div>
+
+          <h3>
+            <span class="tag get">GET</span>
+            <code class="path">/git/accounts</code>
+          </h3>
+          <p>
+            Second step of the connect phase — called after returning to
+            <code>/git/callback?status=success</code>, to confirm and display
+            the newly connected account.
+          </p>
+          <pre>[
+  {
+    <span class="k">"id"</span>: <span class="s">"auth-account-uuid"</span>,
+    <span class="k">"provider"</span>: <span class="s">"GITHUB"</span>,
+    <span class="k">"external_username"</span>: <span class="s">"johndoe"</span>,
+    <span class="k">"connected_at"</span>: <span class="s">"2026-06-01T10:00:00Z"</span>
+  }
+]</pre>
+
+          <h3>
+            <span class="tag get">GET</span>
+            <code class="path">/git/accounts/{account_id}/repositories</code>
+          </h3>
+          <pre>[{ <span class="k">"id"</span>: <span class="s">"gh-repo-id-string"</span>, <span class="k">"full_name"</span>: <span class="s">"org/repo"</span>, <span class="k">"private"</span>: <span class="b">true</span>, <span class="k">"default_branch"</span>: <span class="s">"main"</span> }]</pre>
+          <p style="font-size: 13px; color: var(--text-faint)">
+            Error: <code>404</code> not owned · <code>403</code> token revoked
+          </p>
+
+          <h3>
+            <span class="tag get">GET</span>
+            <code class="path"
+              >/git/accounts/{account_id}/repositories/{repo_id}/branches</code
+            >
+          </h3>
+          <pre>[
+  { <span class="k">"name"</span>: <span class="s">"main"</span>, <span class="k">"commit_sha"</span>: <span class="s">"abc123"</span> },
+  { <span class="k">"name"</span>: <span class="s">"develop"</span>, <span class="k">"commit_sha"</span>: <span class="s">"def456"</span> }
+]</pre>
+
+          <div class="code-label">
+            auth · internal (PaaS only, x-service-key header required)
+          </div>
+
+          <h3>
+            <span class="tag post">POST</span>
+            <code class="path"
+              >/internal/git/{user_id}/accounts/{account_id}/repos/{repo_id}/resolve</code
+            >
+          </h3>
+          <p>
+            Verifies account/repo ownership, verifies token validity, checks the
+            branch exists on GitHub, and if
+            <code>auto_deploy_on_push=true</code>, creates the webhook and
+            generates a short-lived clone-token.
+          </p>
+          <div class="code-label">Request body</div>
+          <pre>{
+  <span class="k">"branch"</span>: <span class="s">"main"</span>,
+  <span class="k">"auto_deploy_on_push"</span>: <span class="b">true</span>,
+  <span class="k">"callback_url"</span>: <span class="s">"https://cloud.danaix.com/applications/repository/webhooks/push/{repository_id}"</span>
+}</pre>
+          <div class="code-label">200 · valid</div>
+          <pre>{
+  <span class="k">"valid"</span>: <span class="b">true</span>, <span class="k">"error"</span>: <span class="n">null</span>,
+  <span class="k">"repo"</span>: { <span class="k">"full_name"</span>: <span class="s">"org/repo"</span>, <span class="k">"clone_url"</span>: <span class="s">"https://github.com/org/repo.git"</span>, <span class="k">"external_repo_id"</span>: <span class="s">"123"</span> },
+  <span class="k">"branch"</span>: { <span class="k">"exists"</span>: <span class="b">true</span>, <span class="k">"commit_sha"</span>: <span class="s">"abc123"</span> },
+  <span class="k">"clone_token"</span>: { <span class="k">"value"</span>: <span class="s">"ghs_xxx"</span>, <span class="k">"expires_at"</span>: <span class="s">"2026-07-30T12:00:00Z"</span> },
+  <span class="k">"webhook"</span>: { <span class="k">"id"</span>: <span class="s">"gh-hook-id"</span>, <span class="k">"secret"</span>: <span class="s">"whsec_xxx"</span> }
+}</pre>
+          <p style="font-size: 13.5px">
+            If <code class="inline">auto_deploy_on_push: false</code>, the
+            <code class="inline">webhook</code> field is
+            <code class="inline">null</code>.
+          </p>
+          <div class="code-label">200 · invalid</div>
+          <pre>{ <span class="k">"valid"</span>: <span class="b">false</span>, <span class="k">"error"</span>: <span class="s">"branch_not_found"</span>, <span class="k">"repo"</span>: <span class="n">null</span>, <span class="k">"branch"</span>: <span class="n">null</span>, <span class="k">"clone_token"</span>: <span class="n">null</span>, <span class="k">"webhook"</span>: <span class="n">null</span> }</pre>
+          <p style="font-size: 13px; color: var(--text-faint)">
+            Possible error values: <code>branch_not_found</code>,
+            <code>repo_access_revoked</code>, <code>account_not_owned</code>,
+            <code>webhook_creation_failed</code>
+          </p>
+
+          <h3>
+            <span class="tag post">POST</span>
+            <code class="path">/internal/.../clone-token</code>
+          </h3>
+          <pre>{ <span class="k">"value"</span>: <span class="s">"ghs_yyy"</span>, <span class="k">"expires_at"</span>: <span class="s">"2026-07-30T13:00:00Z"</span> }</pre>
+          <p style="font-size: 13px; color: var(--text-faint)">
+            Error: <code>403</code> repo_access_revoked
+          </p>
+
+          <h3>
+            <span class="tag delete">DELETE</span>
+            <code class="path">/internal/.../webhooks/{webhook_id}</code>
+          </h3>
+          <pre>{ <span class="k">"deleted"</span>: <span class="b">true</span> }</pre>
+          <p style="font-size: 13.5px">
+            Idempotent; must return success even if the hook no longer exists on
+            GitHub.
+          </p>
+
+          <div class="code-label">PaaS · user-facing</div>
+
+          <h3>
+            <span class="tag post">POST</span>
+            <code class="path">/applications/repository/</code>
+          </h3>
+          <p><strong>Auth:</strong> the PaaS user's session/JWT.</p>
+          <div class="code-label">Request body</div>
+          <pre>{
+  <span class="k">"name"</span>: <span class="s">"string"</span>, <span class="k">"description"</span>: <span class="s">"string"</span>, <span class="k">"namespace_id"</span>: <span class="s">"uuid"</span>,
+
+  <span class="k">"account_id"</span>: <span class="s">"uuid"</span>, <span class="k">"repository_id"</span>: <span class="s">"string"</span>, <span class="k">"branch"</span>: <span class="s">"main"</span>,
+  <span class="k">"dockerfile_path"</span>: <span class="s">"Dockerfile"</span>, <span class="k">"build_context_path"</span>: <span class="s">"."</span>,
+
+  <span class="k">"command"</span>: [<span class="s">"string"</span>], <span class="k">"args"</span>: [<span class="s">"string"</span>],
+  <span class="k">"readiness_probe"</span>: {
+    <span class="k">"path"</span>: <span class="s">"/health"</span>, <span class="k">"port"</span>: <span class="b">8080</span>,
+    <span class="k">"initial_delay_seconds"</span>: <span class="b">5</span>, <span class="k">"period_seconds"</span>: <span class="b">10</span>,
+    <span class="k">"timeout_seconds"</span>: <span class="b">1</span>, <span class="k">"failure_threshold"</span>: <span class="b">3</span>
+  },
+
+  <span class="k">"ports"</span>: [{ <span class="k">"name"</span>: <span class="s">"http"</span>, <span class="k">"protocol"</span>: <span class="s">"TCP"</span>, <span class="k">"target_port"</span>: <span class="b">8080</span>, <span class="k">"port"</span>: <span class="b">80</span> }],
+  <span class="k">"routes"</span>: [{
+    <span class="k">"host"</span>: <span class="s">"string"</span>, <span class="k">"port_name"</span>: <span class="s">"http"</span>, <span class="k">"tls_enabled"</span>: <span class="b">true</span>,
+    <span class="k">"redirect_to_https"</span>: <span class="b">true</span>, <span class="k">"tls_termination"</span>: <span class="s">"string"</span>,
+    <span class="k">"tls_certificate"</span>: <span class="s">"string"</span>, <span class="k">"tls_key"</span>: <span class="s">"string"</span>, <span class="k">"tls_ca_cert"</span>: <span class="s">"string"</span>
+  }],
+  <span class="k">"volumes"</span>: [{ <span class="k">"name"</span>: <span class="s">"data"</span>, <span class="k">"mount_path"</span>: <span class="s">"/data"</span>, <span class="k">"size"</span>: <span class="b">5</span> }],
+  <span class="k">"scaling"</span>: {
+    <span class="k">"mode"</span>: <span class="s">"AUTO"</span>, <span class="k">"replicas"</span>: <span class="n">null</span>,
+    <span class="k">"min_replicas"</span>: <span class="b">1</span>, <span class="k">"max_replicas"</span>: <span class="b">5</span>,
+    <span class="k">"max_cpu_percent"</span>: <span class="b">80</span>, <span class="k">"max_memory_percent"</span>: <span class="b">80</span>
+  },
+  <span class="k">"variables"</span>: [{ <span class="k">"key"</span>: <span class="s">"DATABASE_URL"</span>, <span class="k">"value"</span>: <span class="s">"postgres://..."</span>, <span class="k">"is_secret"</span>: <span class="b">true</span> }],
+
+  <span class="k">"auto_deploy_on_push"</span>: <span class="b">true</span>,
+  <span class="k">"application_plan"</span>: { <span class="k">"cpu"</span>: <span class="b">2</span>, <span class="k">"memory"</span>: <span class="b">512</span>, <span class="k">"storage"</span>: <span class="b">1</span>, <span class="k">"type"</span>: <span class="s">"CUSTOM"</span> },
+  <span class="k">"billing_type"</span>: <span class="s">"PAYG"</span>
+}</pre>
+          <div class="callout violet">
+            <strong>Note</strong>
+            <code class="inline">account_id</code> and
+            <code class="inline">repository_id</code> are the same values
+            obtained from auth's response during the browse phase.
+            <code class="inline">repository_id</code> here is the repo's
+            identifier on GitHub/auth (a string), not the UUID of the
+            <code class="inline">repositories</code> record in PaaS that gets
+            generated later.
+          </div>
+          <div class="code-label">201 · Response</div>
+          <pre>{
+  <span class="k">"id"</span>: <span class="s">"application-uuid"</span>, <span class="k">"name"</span>: <span class="s">"string"</span>, <span class="k">"status"</span>: <span class="s">"CREATING"</span>,
+  <span class="k">"repository"</span>: { <span class="k">"id"</span>: <span class="s">"repository-uuid"</span>, <span class="k">"name"</span>: <span class="s">"org/repo"</span>, <span class="k">"branch"</span>: <span class="s">"main"</span>, <span class="k">"auto_deploy_on_push"</span>: <span class="b">true</span> },
+  <span class="k">"deployment"</span>: { <span class="k">"id"</span>: <span class="s">"deployment-uuid"</span>, <span class="k">"status"</span>: <span class="s">"PENDING"</span> }
+}</pre>
+          <p style="font-size: 13px; color: var(--text-faint)">
+            Error: <code>422</code> validation (e.g.
+            <code>route.port_name</code> has no match in <code>ports</code>) ·
+            <code>400</code> when resolve returns <code>valid: false</code>,
+            e.g. <code>{"error": "branch_not_found"}</code>
+          </p>
+
+          <h3>
+            <span class="tag get">GET</span>
+            <code class="path">/applications/repository/{application_id}</code>
+          </h3>
+          <p>
+            The <code class="inline">ports</code>/<code class="inline"
+              >routes</code
+            >/<code class="inline">volumes</code>/<code class="inline"
+              >scaling</code
+            >
+            fields, etc., are read live from OpenShift using
+            <code class="inline"
+              >label selector = danaix.com/application-id=&lt;id&gt;</code
+            >.
+          </p>
+          <pre>{
+  <span class="k">"id"</span>: <span class="s">"application-uuid"</span>, <span class="k">"name"</span>: <span class="s">"string"</span>, <span class="k">"status"</span>: <span class="s">"ACTIVE"</span>,
+  <span class="k">"repository"</span>: { <span class="k">"name"</span>: <span class="s">"org/repo"</span>, <span class="k">"branch"</span>: <span class="s">"main"</span>, <span class="k">"auto_deploy_on_push"</span>: <span class="b">true</span> },
+  <span class="k">"deployment"</span>: { <span class="k">"status"</span>: <span class="s">"RUNNING"</span>, <span class="k">"name"</span>: <span class="s">"workload-name"</span> },
+  <span class="k">"command"</span>: [<span class="s">"string"</span>], <span class="k">"args"</span>: [<span class="s">"string"</span>],
+  <span class="k">"readiness_probe"</span>: { <span class="k">"path"</span>: <span class="s">"/health"</span>, <span class="k">"port"</span>: <span class="b">8080</span>, <span class="k">"..."</span>: <span class="s">"..."</span> },
+  <span class="k">"ports"</span>: [ { <span class="k">"name"</span>: <span class="s">"http"</span>, <span class="k">"protocol"</span>: <span class="s">"TCP"</span>, <span class="k">"target_port"</span>: <span class="b">8080</span>, <span class="k">"port"</span>: <span class="b">80</span> } ],
+  <span class="k">"routes"</span>: [ { <span class="k">"host"</span>: <span class="s">"string"</span>, <span class="k">"port_name"</span>: <span class="s">"http"</span>, <span class="k">"tls_enabled"</span>: <span class="b">true</span> } ],
+  <span class="k">"volumes"</span>: [ { <span class="k">"name"</span>: <span class="s">"data"</span>, <span class="k">"mount_path"</span>: <span class="s">"/data"</span>, <span class="k">"size"</span>: <span class="b">5</span> } ],
+  <span class="k">"scaling"</span>: { <span class="k">"mode"</span>: <span class="s">"AUTO"</span>, <span class="k">"min_replicas"</span>: <span class="b">1</span>, <span class="k">"max_replicas"</span>: <span class="b">5</span> }
+}</pre>
+          <p style="font-size: 13px; color: var(--text-faint)">
+            Error: <code>404</code>
+          </p>
+
+          <h3>
+            <span class="tag put">PUT</span>
+            <code class="path">/applications/repository/{application_id}</code>
+          </h3>
+          <p>
+            Same shape as create but partial — only the fields that change. The
+            response has the same shape as GET. Error: <code>422</code>,
+            <code>404</code>
+          </p>
+
+          <h3>
+            <span class="tag delete">DELETE</span>
+            <code class="path">/applications/repository/{application_id}</code>
+          </h3>
+          <p>Response: <code>204</code>. Error: <code>404</code></p>
+
+          <h3>
+            <span class="tag post">POST</span>
+            <code class="path"
+              >/applications/repository/webhooks/push/{repository_id}</code
+            >
+          </h3>
+          <div class="callout amber">
+            <strong>Note</strong>
+            This route is not under <code class="inline">/internal/...</code> —
+            GitHub calls it directly, without the
+            <code class="inline">x-service-key</code> header. The only
+            authentication mechanism is the HMAC signature.
+          </div>
+          <p>
+            <strong>Auth:</strong> no service-key; verified only via
+            <code class="inline">X-Hub-Signature-256</code>, checked against
+            <code class="inline">repositories.webhook_secret</code> (decrypted)
+            over the raw body.
+          </p>
+          <p>
+            <strong>Headers:</strong> <code>X-Hub-Signature-256</code>,
+            <code>X-GitHub-Delivery</code>, <code>X-GitHub-Event</code>
+          </p>
+          <pre><span class="s">202 accepted</span>: { <span class="k">"accepted"</span>: <span class="b">true</span> }   <span class="n">// actual processing is async</span>
+
+<span class="s">200 no-op</span>:      { <span class="k">"accepted"</span>: <span class="b">false</span>, <span class="k">"reason"</span>: <span class="s">"duplicate_delivery"</span> }
+              { <span class="k">"accepted"</span>: <span class="b">false</span>, <span class="k">"reason"</span>: <span class="s">"branch_mismatch"</span> }
+
+<span class="n">Error</span>: 401 invalid signature · 404 repository_id doesn't exist</pre>
+          <p style="font-size: 13.5px">
+            Full processing details for this endpoint are in section 6.
+          </p>
+        </section>
+
+        <!-- ================= SECTION 4 ================= -->
+        <section id="s4">
+          <div class="eyebrow fade-in">04 / Flow</div>
+          <h2 class="fade-in">
+            Full Flow — from GitHub connection to execution on OpenShift
+          </h2>
+
+          <h3>
+            GitHub connect phase
+            <span
+              style="
+                color: var(--text-faint);
+                font-weight: 400;
+                font-size: 13px;
+              "
+              >(one-time, directly between Browser and auth)</span
+            >
+          </h3>
+          <ol class="steps">
+            <li>
+              <div class="step-title">Request connection</div>
+              <p>
+                The dashboard calls
+                <code class="inline"
+                  >GET /user/git/github/connect?return_to=...</code
+                >
+                on auth; auth returns a <code class="inline">302</code> to
+                GitHub's consent URL.
+              </p>
+            </li>
+            <li>
+              <div class="step-title">User approval</div>
+              <p>The Browser goes to GitHub, the user approves.</p>
+            </li>
+            <li>
+              <div class="step-title">Return with code</div>
+              <p>
+                GitHub redirects the Browser to
+                <code class="inline"
+                  >GET /user/git/github/callback?code=...&state=...</code
+                >
+                on auth.
+              </p>
+            </li>
+            <li>
+              <div class="step-title">Create connection</div>
+              <p>
+                auth exchanges the code, obtains a token, fetches
+                <code class="inline">{id, login}</code>, and creates the
+                <code class="inline">git_connections</code> record.
+              </p>
+            </li>
+            <li>
+              <div class="step-title">Return to dashboard</div>
+              <p>
+                Redirect to
+                <code class="inline"
+                  >.../git/callback?status=success&account_id=&lt;uuid&gt;</code
+                >
+                — with no token in the URL.
+              </p>
+            </li>
+            <li>
+              <div class="step-title">Final confirmation</div>
+              <p>
+                The dashboard's callback page calls
+                <code class="inline">GET /git/accounts</code> and displays the
+                newly connected account. If
+                <code class="inline">status=error</code> is returned, this
+                request is never made.
+              </p>
+            </li>
+          </ol>
+
+          <h3>
+            Browse phase
+            <span
+              style="
+                color: var(--text-faint);
+                font-weight: 400;
+                font-size: 13px;
+              "
+              >(entirely direct, no PaaS involvement)</span
+            >
+          </h3>
+          <ol class="steps">
+            <li>
+              <div class="step-title">List accounts</div>
+              <p>
+                The frontend calls
+                <code class="inline">GET /git/accounts</code> directly on auth.
+              </p>
+            </li>
+            <li>
+              <div class="step-title">List repos</div>
+              <p>
+                The user selects an account →
+                <code class="inline"
+                  >GET /git/accounts/{account_id}/repositories</code
+                >
+              </p>
+            </li>
+            <li>
+              <div class="step-title">List branches</div>
+              <p>
+                The user selects a repo →
+                <code class="inline"
+                  >GET .../repositories/{repo_id}/branches</code
+                >
+              </p>
+            </li>
+            <li>
+              <div class="step-title">Complete the form</div>
+              <p>
+                The user fills in the rest of the form (dockerfile_path, ports,
+                routes, volumes, variables, scaling, plan). The frontend must
+                keep the selected <code class="inline">account_id</code>,
+                <code class="inline">repository_id</code>, and
+                <code class="inline">branch</code> for the final submit.
+              </p>
+            </li>
+          </ol>
+
+          <h3>
+            Submit to PaaS phase
+            <span
+              style="
+                color: var(--text-faint);
+                font-weight: 400;
+                font-size: 13px;
+              "
+              >— POST /applications/repository/</span
+            >
+          </h3>
+          <ol class="steps">
+            <li>
+              <div class="step-title">Generate ID and callback_url</div>
+              <p>
+                PaaS pre-generates a
+                <code class="inline">repository_id</code> (UUID) and builds the
+                <code class="inline">callback_url</code> from it:
+                <code class="inline"
+                  >https://cloud.danaix.com/applications/repository/webhooks/push/{repository_id}</code
+                >
+              </p>
+            </li>
+            <li>
+              <div class="step-title">Validate with auth</div>
+              <p>
+                Before any DB write:
+                <code class="inline"
+                  >POST
+                  /internal/git/{user_id}/accounts/{account_id}/repos/{repo_id}/resolve</code
+                >
+                with
+                <code class="inline"
+                  >{branch, auto_deploy_on_push, callback_url}</code
+                >. If <code class="inline">valid: false</code>, PaaS immediately
+                returns an error and writes no rows.
+              </p>
+            </li>
+            <li>
+              <div class="step-title">Write to DB (one transaction)</div>
+              <p>
+                <code class="inline">repositories</code> with the same
+                pre-generated id, then
+                <code class="inline">applications</code> (status=CREATING),
+                <code class="inline">application_deployments</code>
+                (status=PENDING, kind=DEPLOYMENT), and
+                <code class="inline">application_plans</code> per the mapping
+                table in section 2.
+              </p>
+            </li>
+            <li>
+              <div class="step-title">Create on OpenShift</div>
+              <p>In this order:</p>
+              <div class="tbl-wrap" style="margin-top: 10px">
+                <table>
+                  <tr>
+                    <th style="width: 36px">#</th>
+                    <th>Object</th>
+                    <th>Key fields</th>
+                  </tr>
+                  <tr>
+                    <td>1</td>
+                    <td>Secret <code>basic-auth</code></td>
+                    <td>
+                      password = <code>clone_token.value</code>; must be
+                      replaced with a fresh clone-token before every rebuild
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>2</td>
+                    <td>ImageStream</td>
+                    <td>—</td>
+                  </tr>
+                  <tr>
+                    <td>3</td>
+                    <td>BuildConfig</td>
+                    <td>
+                      <code>source.git.uri</code>=clone_url,
+                      <code>ref</code>=branch, <code>sourceSecret</code>,
+                      <code>contextDir</code>=build_context_path,
+                      <code>dockerfilePath</code>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>4</td>
+                    <td>Secret/ConfigMap</td>
+                    <td>
+                      from <code>variables</code>, split based on
+                      <code>is_secret</code>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>5</td>
+                    <td>Deployment</td>
+                    <td>
+                      image from ImageStream, command/args/readinessProbe,
+                      envFrom, container ports, resources from plan, replicas if
+                      MANUAL
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>6</td>
+                    <td>Service</td>
+                    <td>one ServicePort per <code>ports</code> item</td>
+                  </tr>
+                  <tr>
+                    <td>7</td>
+                    <td>Route</td>
+                    <td>
+                      for each <code>routes</code> item;
+                      <code>port.targetPort</code> matched via
+                      <code>port_name</code> against the Service's port name;
+                      TLS fields
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>8</td>
+                    <td>PVC</td>
+                    <td>
+                      for each <code>volumes</code> item, mounted at
+                      <code>mount_path</code>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>9</td>
+                    <td>HPA</td>
+                    <td>
+                      only if <code>scaling.mode=AUTO</code>; min/max replicas,
+                      CPU/Memory metric
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>10</td>
+                    <td>Start Build</td>
+                    <td>—</td>
+                  </tr>
+                  <tr>
+                    <td>11</td>
+                    <td>Update <code>application_deployments.name</code></td>
+                    <td>with the actual workload name after apply</td>
+                  </tr>
+                </table>
+              </div>
+            </li>
+            <li>
+              <div class="step-title">Celery polling</div>
+              <p>
+                Poll Build status, then Deployment rollout, updating
+                <code class="inline">applications.status</code> and
+                <code class="inline">application_deployments.status</code>
+                (<code class="inline">CREATING → ACTIVE/FAILED</code>,
+                <code class="inline">PENDING → DEPLOYING → RUNNING/FAILED</code
+                >) — the same pattern as the catalog pipeline.
+              </p>
+            </li>
+          </ol>
+
+          <h3>
+            Delete phase
+            <span
+              style="
+                color: var(--text-faint);
+                font-weight: 400;
+                font-size: 13px;
+              "
+              >— DELETE /applications/repository/{application_id}</span
+            >
+          </h3>
+          <ol class="steps">
+            <li>
+              <div class="step-title">Find the repository record</div>
+              <p>
+                PaaS locates the related
+                <code class="inline">repositories</code> record.
+              </p>
+            </li>
+            <li>
+              <div class="step-title">Delete the webhook</div>
+              <p>
+                If <code class="inline">webhook_id</code> is non-null:
+                <code class="inline"
+                  >DELETE /internal/.../webhooks/{webhook_id}</code
+                >
+                — idempotent, must return 200 even if the hook no longer exists
+                on GitHub.
+              </p>
+            </li>
+            <li>
+              <div class="step-title">Clean up OpenShift</div>
+              <p>
+                Using
+                <code class="inline"
+                  >label selector = danaix.com/application-id=&lt;id&gt;</code
+                >, all related objects (Service, Route, BuildConfig,
+                ImageStream, Deployment, PVC, Secret, ConfigMap, HPA) are found
+                and deleted.
+              </p>
+            </li>
+            <li>
+              <div class="step-title">Soft-delete records</div>
+              <p>
+                <code class="inline">applications</code>,
+                <code class="inline">application_deployments</code>,
+                <code class="inline">application_plans</code>,
+                <code class="inline">repositories</code> are marked following
+                the <code class="inline">deleted_at</code> pattern.
+              </p>
+            </li>
+          </ol>
+        </section>
+
+        <!-- ================= SECTION 5 ================= -->
+        <section id="s5">
+          <div class="eyebrow fade-in">05 / Validation</div>
+          <h2 class="fade-in">Request Validations</h2>
+          <ul class="plain fade-in">
+            <li>
+              <strong>routes[].port_name</strong> must exactly match one of the
+              values in <code class="inline">ports[].name</code>, otherwise
+              <code class="inline">422</code>.
+            </li>
+            <li>
+              If <strong>scaling.mode = AUTO</strong>, the
+              <code class="inline">min_replicas</code>,
+              <code class="inline">max_replicas</code> fields are required;
+              <code class="inline">replicas</code> is ignored.
+            </li>
+            <li>
+              If <strong>scaling.mode = MANUAL</strong>, the
+              <code class="inline">replicas</code> field is required; the AUTO
+              fields are ignored.
+            </li>
+            <li>
+              <strong>application_plan.type</strong> must be one of
+              <code class="inline">CUSTOM</code>/<code class="inline"
+                >PACKAGE</code
+              >, and <strong>billing_type</strong> must be one of
+              <code class="inline">PAYG</code>/<code class="inline">FLAVOR</code
+              >.
+            </li>
+          </ul>
+        </section>
+
+        <!-- ================= SECTION 6 ================= -->
+        <section id="s6">
+          <div class="eyebrow fade-in">06 / Optional</div>
+          <h2 class="fade-in">Separate Phase — auto_deploy_on_push</h2>
+          <p class="section-intro fade-in">
+            For when we also want the webhook call to actually be processed —
+            independent of the main create/delete phase.
+          </p>
+
+          <ul class="plain fade-in">
+            <li>
+              <strong>Public route:</strong>
+              <code class="inline"
+                >POST
+                /applications/repository/webhooks/push/{repository_id}</code
+              >
+              (full schema in section 3).
+            </li>
+            <li>
+              <strong>Redis:</strong> for delivery idempotency —
+              <code class="inline">webhook_delivery:{delivery_id}</code>,
+              24-hour TTL, <code class="inline">SET NX</code>.
+            </li>
+            <li>
+              <strong>A new Celery task</strong> for async push processing:
+              obtaining a fresh clone-token from auth, updating the git Secret
+              on OpenShift, starting a new Build (the same action as a manual
+              rebuild), and transitioning status to
+              <code class="inline">UPDATING</code> /
+              <code class="inline">DEPLOYING</code> until final resolution by
+              regular polling.
+            </li>
+            <li>
+              <strong>Encryption mechanism</strong> for
+              <code class="inline">webhook_secret</code> — shared with the
+              mechanism used for other secrets.
+            </li>
+          </ul>
+
+          <h3>Push processing logic</h3>
+          <ol class="steps">
+            <li>
+              <div class="step-title">Find the repository</div>
+              <p>
+                From <code class="inline">{repository_id}</code> in the URL, the
+                <code class="inline">repositories</code> record is located.
+              </p>
+            </li>
+            <li>
+              <div class="step-title">Check idempotency</div>
+              <p>
+                <code class="inline"
+                  >SET webhook_delivery:{X-GitHub-Delivery} NX EX 86400</code
+                >
+                in Redis → if duplicate:
+                <code class="inline"
+                  >200 {accepted:false, reason:duplicate_delivery}</code
+                >
+              </p>
+            </li>
+            <li>
+              <div class="step-title">Verify signature</div>
+              <p>
+                HMAC signature check with the (decrypted)
+                <code class="inline">webhook_secret</code> over the raw body →
+                invalid: <code class="inline">401</code>
+              </p>
+            </li>
+            <li>
+              <div class="step-title">Check branch</div>
+              <p>
+                <code class="inline">payload.ref</code> against
+                <code class="inline">repositories.branch</code> → mismatch:
+                <code class="inline"
+                  >200 {accepted:false, reason:branch_mismatch}</code
+                >
+              </p>
+            </li>
+            <li>
+              <div class="step-title">Enqueue</div>
+              <p>
+                The async Celery task is queued, and
+                <code class="inline">202 {accepted:true}</code> is returned
+                immediately.
+              </p>
+            </li>
+          </ol>
+
+          <div class="callout fade-in">
+            <strong>Reminder</strong>
+            The rest of the main flow — resolve with
+            <code class="inline">auto_deploy_on_push: true</code>, saving
+            <code class="inline">webhook_id</code>/<code class="inline"
+              >webhook_secret</code
+            >
+            at create time, and deletion at delete time — is part of the main
+            create/delete flow; what's treated as a separate phase here is only
+            the actual handling of incoming push events and the rebuild.
+          </div>
+        </section>
+
+        <footer>
+          Final design document — PaaS Repository Deployment From GitHub ·
+          applications/repository
+        </footer>
+      </div>
+    </div>
+
+    <script>
+      // scroll-spy for the rail nav
+      const links = document.querySelectorAll(".rail a");
+      const sections = [...links].map((l) =>
+        document.querySelector(l.getAttribute("href")),
+      );
+      function onScroll() {
+        let idx = 0;
+        sections.forEach((s, i) => {
+          if (s && s.getBoundingClientRect().top < 140) idx = i;
+        });
+        links.forEach((l, i) => l.classList.toggle("active", i === idx));
+      }
+      document.addEventListener("scroll", onScroll, { passive: true });
+      onScroll();
+
+      // fade-in on view
+      const io = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((e) => {
+            if (e.isIntersecting) e.target.classList.add("shown");
+          });
+        },
+        { threshold: 0.1 },
+      );
+      document.querySelectorAll(".fade-in").forEach((el) => io.observe(el));
+    </script>
+  </body>
+</html>
