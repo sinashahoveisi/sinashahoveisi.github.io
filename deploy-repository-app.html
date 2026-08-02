@@ -929,7 +929,7 @@
             tokens (e.g. GitLab).
           </p>
 
-          <h3>GitHub OAuth App vs GitHub App — decision and tradeoffs</h3>
+          <h3>GitHub OAuth App vs GitHub App — full comparison</h3>
           <p>
             There are two distinct ways to integrate with GitHub for repository
             access. Neither is the same thing as the existing GitHub SSO login,
@@ -945,46 +945,132 @@
               color: var(--text);
             "
           >
-            1. Classic GitHub OAuth App
+            1. Connect flow
           </h3>
-          <p>
-            Same family as the existing SSO integration, but with a different,
-            dedicated OAuth App registration and a wider scope such as
-            <code class="inline">repo</code>.
-          </p>
+          <p><strong>Classic OAuth App</strong></p>
           <ul class="plain">
             <li>
-              <strong>Connect flow:</strong> standard OAuth consent screen. The
-              user approves once; access is all-or-nothing based on scope — the
-              token receives access to <em>all</em> repositories the user can
-              see (public and private), not a hand-picked subset.
+              User is redirected to
+              <code class="inline">/login/oauth/authorize?scope=repo</code>.
             </li>
             <li>
-              <strong>Token lifetime:</strong> by default does
-              <em>not</em> expire unless the OAuth App has "expiring tokens"
-              explicitly enabled. A single stored token can therefore be reused
-              indefinitely without re-fetching from GitHub.
+              They see a simple consent screen: "this app wants access to scopes
+              X".
             </li>
             <li>
-              <strong>Pros:</strong> simplest to implement — same pattern as the
-              existing SSO integration, no extra signing/JWT logic, fastest path
-              to an MVP.
+              They approve → done. Access is granted to
+              <strong>every repo the user can reach</strong> (public + private).
+              There is no way for the user to pick a subset.
+            </li>
+          </ul>
+          <p><strong>GitHub App</strong></p>
+          <ul class="plain">
+            <li>
+              User goes to the install page
+              (<code class="inline">/apps/{app-name}/installations/new</code>).
             </li>
             <li>
-              <strong>Cons:</strong> a long-lived (potentially permanent) token
-              with broad access sits encrypted in our database. If the database
-              or backups ever leak, that token grants an attacker full access to
-              the user's repos until the user manually revokes it — there is no
-              automatic expiry safety net. There is also no per-repo access
-              scoping; the user cannot limit which repos the connection can see.
+              They must explicitly choose: "all repositories" or
+              <strong>"only these specific repositories"</strong>.
             </li>
             <li>
-              <strong>Webhooks:</strong> must be created and deleted
-              <em>per repository</em> individually
-              (<code class="inline">POST /repos/{owner}/{repo}/hooks</code>).
-              Every repo that wants auto-deploy-on-push needs its own webhook
-              managed and cleaned up — this is the approach assumed by the
-              resolve/delete flows elsewhere in this document.
+              To grant a new repo later, they must update the installation in
+              GitHub settings (or your UI can deep-link them to the installation
+              management page).
+            </li>
+          </ul>
+          <div class="callout fade-in">
+            <strong>Practical difference</strong>
+            GitHub App has a slightly heavier UX (one extra step) but is far more
+            transparent — the user knows exactly what the PaaS can see. With
+            classic OAuth, users typically click "Authorize" without thinking and
+            only later realize every private repo was exposed.
+          </div>
+
+          <h3
+            style="
+              font-size: 15.5px;
+              margin-top: 28px;
+              font-weight: 700;
+              color: var(--text);
+            "
+          >
+            2. Token lifetime and nature
+          </h3>
+          <p><strong>Classic OAuth App</strong></p>
+          <ul class="plain">
+            <li>
+              The token you receive does <em>not</em> expire by default, unless:
+              <ul class="plain" style="margin-top: 8px">
+                <li>
+                  the App has "Enable expiring tokens" turned on (then the access
+                  token expires in a few hours and must be renewed via
+                  <code class="inline">refresh_token</code>), or
+                </li>
+                <li>the user manually revokes it.</li>
+              </ul>
+            </li>
+            <li>
+              In other words, you can fetch the token once and keep it forever
+              (or for a very long time).
+            </li>
+          </ul>
+          <p><strong>GitHub App</strong></p>
+          <ul class="plain">
+            <li>
+              Installation access tokens are <strong>always short-lived</strong>
+              — typically ~1 hour.
+            </li>
+            <li>
+              To mint a fresh token, you sign a JWT with
+              <code class="inline">installation_id</code> + the App's private
+              key (generated when the App was created), then exchange that for a
+              short-lived installation token.
+            </li>
+            <li>
+              There is <strong>no permanent token to store</strong> — only
+              <code class="inline">installation_id</code> is persisted, and a
+              fresh token is issued whenever one is needed.
+            </li>
+          </ul>
+          <div class="callout amber fade-in">
+            <strong>Can you make the token permanent? Should you?</strong>
+            With classic OAuth it is technically possible (and is the default if
+            expiring tokens are off). <strong>From a security standpoint it is a
+            bad idea</strong>: if the database (or a backup) leaks, an attacker
+            gets a permanent token with full access to every private repo —
+            unbounded in time. If the user forgets the connection exists, they
+            never revoke it, so the risk lives forever. With a GitHub App, even
+            if <code class="inline">installation_id</code> leaks, an attacker
+            cannot mint new tokens without the App's private key — and any
+            cached tokens go stale within ~1 hour. So: yes you can make OAuth
+            tokens permanent, but you should not — this is one of the main
+            reasons GitHub App was designed to retire that pattern.
+          </div>
+
+          <h3
+            style="
+              font-size: 15.5px;
+              margin-top: 28px;
+              font-weight: 700;
+              color: var(--text);
+            "
+          >
+            3. Listing repositories
+          </h3>
+          <ul class="plain">
+            <li>
+              <strong>Classic OAuth App:</strong>
+              <code class="inline">GET /user/repos</code> with the user token →
+              every repo the user can access (public only, or public+private,
+              depending on scope).
+            </li>
+            <li>
+              <strong>GitHub App:</strong>
+              <code class="inline">GET /installation/repositories</code> with
+              the installation token → only the repos selected at install time.
+              If the user has multiple installations (e.g. personal account and
+              an organization), you must list installations separately.
             </li>
           </ul>
 
@@ -996,54 +1082,228 @@
               color: var(--text);
             "
           >
-            2. GitHub App (installation-based)
+            4. Handing a token to OpenShift for cloning (private repos)
           </h3>
+          <p>
+            This is the same step already designed in the submit flow: create a
+            <code class="inline">basic-auth</code> Secret and attach it via
+            <code class="inline">BuildConfig.spec.source.sourceSecret</code>.
+          </p>
+          <p><strong>Classic OAuth App</strong></p>
           <ul class="plain">
             <li>
-              <strong>Connect flow:</strong> the user is sent through GitHub's
-              "Install App" flow instead of a plain consent screen, and
-              explicitly picks either "all repositories" or a specific list the
-              App may access. More transparent for the user, but one extra step
-              compared to classic OAuth consent.
+              Put the (possibly permanent) token directly as the Secret password.
             </li>
             <li>
-              <strong>Token lifetime:</strong> installation access tokens are
-              always short-lived (~1 hour). There is no long-lived user token to
-              store — instead we store only the
-              <code class="inline">installation_id</code>, and mint a fresh
-              token on demand by signing a JWT with the GitHub App's private key
-              each time one is needed.
-            </li>
-            <li>
-              <strong>Pros:</strong> much smaller security footprint — nothing
-              long-lived and broadly scoped sits in our database; access is
-              limited to only the repos explicitly granted at install time; a
-              single App-level webhook can receive push events for
-              <em>all</em> installed repositories at once, removing the need to
-              create/track a webhook per repository.
-            </li>
-            <li>
-              <strong>Cons:</strong> extra one-time implementation cost (JWT
-              signing with the App's private key to mint installation tokens,
-              plus installation-management logic), and the connect UX has one
-              more step for the user.
+              Because the token does not expire, you could theoretically build
+              the Secret once and reuse it for every later build — no refresh
+              needed. That is itself a security risk: a token with full access to
+              every user repo sits in a Kubernetes Secret indefinitely.
             </li>
           </ul>
+          <p><strong>GitHub App</strong></p>
+          <ul class="plain">
+            <li>
+              Before every build (manual or push-triggered), mint a fresh
+              short-lived installation token scoped to the selected repos and
+              update the Secret with it.
+            </li>
+            <li>
+              Even if an old Secret is left behind (e.g. an undeleted namespace),
+              it is useless after ~1 hour.
+            </li>
+          </ul>
+          <div class="callout fade-in">
+            <strong>Takeaway</strong>
+            GitHub App is clearly safer here, at the cost of always minting a
+            fresh token before use — never assume a previously issued token is
+            still valid, even when the gap after resolve is short.
+          </div>
 
+          <h3
+            style="
+              font-size: 15.5px;
+              margin-top: 28px;
+              font-weight: 700;
+              color: var(--text);
+            "
+          >
+            5. Auto-deploy on push
+          </h3>
+          <p><strong>Classic OAuth App</strong></p>
+          <ul class="plain">
+            <li>
+              Create a webhook <strong>per repository</strong>
+              (<code class="inline">POST /repos/{owner}/{repo}/hooks</code>) with
+              the user token — this is the approach assumed by the
+              resolve/delete flows elsewhere in this document.
+            </li>
+            <li>
+              Five apps from five repos means five webhooks to create, delete,
+              and signature-verify independently.
+            </li>
+          </ul>
+          <p><strong>GitHub App</strong></p>
+          <ul class="plain">
+            <li>
+              Define a <strong>single App-level webhook</strong> in GitHub App
+              settings; it automatically covers every repo selected in any
+              installation — no per-repo webhook bookkeeping.
+            </li>
+            <li>
+              Incoming payloads include
+              <code class="inline">installation.id</code> and
+              <code class="inline">repository.id</code>, which you match against
+              <code class="inline">git_connections</code> /
+              <code class="inline">repositories</code>.
+            </li>
+            <li>
+              Under a pure GitHub App approach, the resolve-time
+              <code class="inline">want_webhook</code> / per-repo create path
+              could be dropped entirely — the App webhook is configured once and
+              keeps working.
+            </li>
+          </ul>
+          <div class="callout fade-in">
+            <strong>Takeaway</strong>
+            GitHub App is both simpler and more reliable here — fewer places to
+            forget create/delete per repo, and much lighter webhook management
+            code.
+          </div>
+
+          <h3
+            style="
+              font-size: 15.5px;
+              margin-top: 28px;
+              font-weight: 700;
+              color: var(--text);
+            "
+          >
+            Summary comparison
+          </h3>
+          <div class="tbl-wrap fade-in">
+            <table>
+              <tr>
+                <th style="width: 22%">Criterion</th>
+                <th>Classic OAuth App</th>
+                <th>GitHub App</th>
+              </tr>
+              <tr>
+                <td><strong>Connect UX</strong></td>
+                <td>
+                  Simpler, but all-or-nothing (no fine-grained repo control)
+                </td>
+                <td>
+                  One extra step, but granular (exact repo selection)
+                </td>
+              </tr>
+              <tr>
+                <td><strong>Token lifetime</strong></td>
+                <td>
+                  Can be permanent (security risk)
+                </td>
+                <td>
+                  Always short-lived (~1 hour) — safer
+                </td>
+              </tr>
+              <tr>
+                <td><strong>Access scope</strong></td>
+                <td>All of the user's repos</td>
+                <td>Only repos selected at install time</td>
+              </tr>
+              <tr>
+                <td><strong>Initial implementation cost</strong></td>
+                <td>
+                  Lower (same pattern as ordinary OAuth / existing SSO)
+                </td>
+                <td>
+                  Slightly higher (JWT signing with App private key,
+                  installation management)
+                </td>
+              </tr>
+              <tr>
+                <td><strong>Webhook management for auto-deploy</strong></td>
+                <td>
+                  Must create/delete per repository
+                </td>
+                <td>
+                  Once at App level; automatic for all installed repos
+                </td>
+              </tr>
+              <tr>
+                <td><strong>Risk if DB leaks</strong></td>
+                <td>
+                  High — permanent token with full repo access
+                </td>
+                <td>
+                  Low — tokens die within ~1 hour; a leaked
+                  <code>installation_id</code> is useless without the App
+                  private key
+                </td>
+              </tr>
+              <tr>
+                <td><strong>Rate limit</strong></td>
+                <td>
+                  Tied to the user token (shared with the user's own GitHub
+                  activity)
+                </td>
+                <td>
+                  Tied to the installation (separate from personal activity)
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <strong>Scaling to other providers later</strong>
+                  (GitLab / Bitbucket)
+                </td>
+                <td>
+                  Maps cleanly to their standard OAuth models — easier to
+                  homogenize
+                </td>
+                <td>
+                  "Installation" is GitHub-specific, but stays inside the
+                  provider-client abstraction, so overall architecture is
+                  unaffected
+                </td>
+              </tr>
+            </table>
+          </div>
+
+          <h3
+            style="
+              font-size: 15.5px;
+              margin-top: 28px;
+              font-weight: 700;
+              color: var(--text);
+            "
+          >
+            Recommendation
+          </h3>
+          <p>
+            Given that (1) you are handling sensitive data (users' private
+            repos), (2) the token is handed directly to OpenShift for cloning,
+            and (3) auto-deploy on push makes webhook management first-class —
+            <strong>GitHub App is the stronger technical choice</strong>:
+            short-lived tokens, install-time repo scoping, and a single App-level
+            webhook instead of per-repo bookkeeping. The only real cost is the
+            one-time JWT / installation work.
+          </p>
           <div class="callout amber fade-in">
             <strong>Decision (final, for now)</strong>
-            Use classic GitHub OAuth App — for simplicity and fastest
-            implementation. This is currently the only git provider being
-            integrated, and time-to-ship matters more at this stage.
+            Ship with classic GitHub OAuth App for simplicity and fastest
+            implementation — this is currently the only git provider, and
+            time-to-ship matters more at this stage. The comparison above
+            strongly favors GitHub App for security and webhook ergonomics; that
+            switch is explicitly revisitable.
           </div>
           <p>
-            This decision is explicitly revisitable later. Because the internal
+            Because the internal
             <code class="inline">/internal/git/...</code> API contract exposed
             to the PaaS is provider-agnostic (the PaaS never sees raw tokens or
             provider-specific auth details — only repo, branch, clone-token, and
-            webhook operations), switching the underlying GitHub auth mechanism
-            later to a GitHub App would only require changes inside the auth
-            service's GitHub provider-client implementation and the
+            webhook operations), moving GitHub from classic OAuth to a GitHub
+            App later would only require changes inside the auth service's
+            GitHub provider-client and the
             <code class="inline">git_connections</code> table. Nothing in the
             PaaS, and nothing in the API contract between the two services,
             would need to change.
