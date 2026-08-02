@@ -810,7 +810,9 @@
           </h3>
           <p>
             Outside PaaS's ownership — reference only; stores each user's
-            connection to GitHub.
+            connection to a git hosting provider (e.g. GitHub). The schema is
+            provider- and auth-mechanism-aware so a later GitHub App (or
+            GitLab/Bitbucket) path does not force a breaking migration.
           </p>
           <div class="schema fade-in">
             <div class="schema-head">git_connections <span>auth</span></div>
@@ -822,12 +824,22 @@
             <div class="schema-row">
               <span class="col-name">user_id</span
               ><span class="col-type">Integer</span
-              ><span class="col-note">NOT NULL</span>
+              ><span class="col-note">NOT NULL · FK → users.userid</span>
             </div>
             <div class="schema-row">
               <span class="col-name">provider</span
-              ><span class="col-type">Enum(GITHUB)</span
-              ><span class="col-note">NOT NULL</span>
+              ><span class="col-type">String</span
+              ><span class="col-note"
+                >NOT NULL · e.g. GITHUB, GITLAB, BITBUCKET</span
+              >
+            </div>
+            <div class="schema-row">
+              <span class="col-name">auth_type</span
+              ><span class="col-type">String</span
+              ><span class="col-note"
+                >NOT NULL · e.g. OAUTH, GITHUB_APP — selects which fields below
+                are populated</span
+              >
             </div>
             <div class="schema-row">
               <span class="col-name">external_account_id</span
@@ -842,17 +854,30 @@
             <div class="schema-row">
               <span class="col-name">access_token_encrypted</span
               ><span class="col-type">String</span
-              ><span class="col-note">NOT NULL</span>
+              ><span class="col-note"
+                >NULLABLE · populated when auth_type = OAUTH</span
+              >
             </div>
             <div class="schema-row">
               <span class="col-name">refresh_token_encrypted</span
               ><span class="col-type">String</span
-              ><span class="col-note">NULLABLE</span>
+              ><span class="col-note"
+                >NULLABLE · populated when auth_type = OAUTH</span
+              >
             </div>
             <div class="schema-row">
               <span class="col-name">token_expires_at</span
               ><span class="col-type">DateTime</span
-              ><span class="col-note">NULLABLE</span>
+              ><span class="col-note"
+                >NULLABLE · typically null for classic GitHub OAuth App tokens</span
+              >
+            </div>
+            <div class="schema-row">
+              <span class="col-name">installation_id</span
+              ><span class="col-type">String</span
+              ><span class="col-note"
+                >NULLABLE · reserved for auth_type = GITHUB_APP (unused today)</span
+              >
             </div>
             <div class="schema-row">
               <span class="col-name">scopes</span
@@ -869,12 +894,160 @@
               ><span class="col-type">DateTime</span
               ><span class="col-note">NULLABLE</span>
             </div>
-            <div class="schema-row">
-              <span class="col-name">last_used_at</span
-              ><span class="col-type">DateTime</span
-              ><span class="col-note">NOT NULL</span>
-            </div>
           </div>
+          <div class="callout fade-in">
+            <strong>Schema deltas vs. the original model</strong>
+            <ul class="plain" style="margin-bottom: 0">
+              <li>
+                Added <code class="inline">auth_type</code> (non-nullable) —
+                distinguishes which auth mechanism the row uses. Today every
+                row is <code class="inline">provider = "GITHUB"</code> and
+                <code class="inline">auth_type = "OAUTH"</code>.
+              </li>
+              <li>
+                <code class="inline">access_token_encrypted</code> changed from
+                non-nullable to nullable — only populated for OAUTH-type
+                connections; stays null for future installation-based rows.
+              </li>
+              <li>
+                Added <code class="inline">installation_id</code> (nullable) —
+                reserved for future GitHub App (or other installation-based)
+                support; unused/null for all rows today. Purely
+                forward-compatible — not a behavior change.
+              </li>
+              <li>
+                No other columns change.
+              </li>
+            </ul>
+          </div>
+          <p>
+            Because classic GitHub OAuth App tokens typically do not expire
+            (unless the OAuth App has expiring-tokens explicitly enabled),
+            <code class="inline">token_expires_at</code> will likely stay null
+            for GitHub OAuth connections — but the column remains nullable and
+            generic so it works correctly for providers that do return expiring
+            tokens (e.g. GitLab).
+          </p>
+
+          <h3>GitHub OAuth App vs GitHub App — decision and tradeoffs</h3>
+          <p>
+            There are two distinct ways to integrate with GitHub for repository
+            access. Neither is the same thing as the existing GitHub SSO login,
+            which remains untouched either way — this is a separate, dedicated
+            registration used only for repo access.
+          </p>
+
+          <h3
+            style="
+              font-size: 15.5px;
+              margin-top: 28px;
+              font-weight: 700;
+              color: var(--text);
+            "
+          >
+            1. Classic GitHub OAuth App
+          </h3>
+          <p>
+            Same family as the existing SSO integration, but with a different,
+            dedicated OAuth App registration and a wider scope such as
+            <code class="inline">repo</code>.
+          </p>
+          <ul class="plain">
+            <li>
+              <strong>Connect flow:</strong> standard OAuth consent screen. The
+              user approves once; access is all-or-nothing based on scope — the
+              token receives access to <em>all</em> repositories the user can
+              see (public and private), not a hand-picked subset.
+            </li>
+            <li>
+              <strong>Token lifetime:</strong> by default does
+              <em>not</em> expire unless the OAuth App has "expiring tokens"
+              explicitly enabled. A single stored token can therefore be reused
+              indefinitely without re-fetching from GitHub.
+            </li>
+            <li>
+              <strong>Pros:</strong> simplest to implement — same pattern as the
+              existing SSO integration, no extra signing/JWT logic, fastest path
+              to an MVP.
+            </li>
+            <li>
+              <strong>Cons:</strong> a long-lived (potentially permanent) token
+              with broad access sits encrypted in our database. If the database
+              or backups ever leak, that token grants an attacker full access to
+              the user's repos until the user manually revokes it — there is no
+              automatic expiry safety net. There is also no per-repo access
+              scoping; the user cannot limit which repos the connection can see.
+            </li>
+            <li>
+              <strong>Webhooks:</strong> must be created and deleted
+              <em>per repository</em> individually
+              (<code class="inline">POST /repos/{owner}/{repo}/hooks</code>).
+              Every repo that wants auto-deploy-on-push needs its own webhook
+              managed and cleaned up — this is the approach assumed by the
+              resolve/delete flows elsewhere in this document.
+            </li>
+          </ul>
+
+          <h3
+            style="
+              font-size: 15.5px;
+              margin-top: 28px;
+              font-weight: 700;
+              color: var(--text);
+            "
+          >
+            2. GitHub App (installation-based)
+          </h3>
+          <ul class="plain">
+            <li>
+              <strong>Connect flow:</strong> the user is sent through GitHub's
+              "Install App" flow instead of a plain consent screen, and
+              explicitly picks either "all repositories" or a specific list the
+              App may access. More transparent for the user, but one extra step
+              compared to classic OAuth consent.
+            </li>
+            <li>
+              <strong>Token lifetime:</strong> installation access tokens are
+              always short-lived (~1 hour). There is no long-lived user token to
+              store — instead we store only the
+              <code class="inline">installation_id</code>, and mint a fresh
+              token on demand by signing a JWT with the GitHub App's private key
+              each time one is needed.
+            </li>
+            <li>
+              <strong>Pros:</strong> much smaller security footprint — nothing
+              long-lived and broadly scoped sits in our database; access is
+              limited to only the repos explicitly granted at install time; a
+              single App-level webhook can receive push events for
+              <em>all</em> installed repositories at once, removing the need to
+              create/track a webhook per repository.
+            </li>
+            <li>
+              <strong>Cons:</strong> extra one-time implementation cost (JWT
+              signing with the App's private key to mint installation tokens,
+              plus installation-management logic), and the connect UX has one
+              more step for the user.
+            </li>
+          </ul>
+
+          <div class="callout amber fade-in">
+            <strong>Decision (final, for now)</strong>
+            Use classic GitHub OAuth App — for simplicity and fastest
+            implementation. This is currently the only git provider being
+            integrated, and time-to-ship matters more at this stage.
+          </div>
+          <p>
+            This decision is explicitly revisitable later. Because the internal
+            <code class="inline">/internal/git/...</code> API contract exposed
+            to the PaaS is provider-agnostic (the PaaS never sees raw tokens or
+            provider-specific auth details — only repo, branch, clone-token, and
+            webhook operations), switching the underlying GitHub auth mechanism
+            later to a GitHub App would only require changes inside the auth
+            service's GitHub provider-client implementation and the
+            <code class="inline">git_connections</code> table. Nothing in the
+            PaaS, and nothing in the API contract between the two services,
+            would need to change.
+          </p>
 
           <h3>
             <span class="tag post">NEW</span>
